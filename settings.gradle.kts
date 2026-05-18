@@ -12,7 +12,7 @@ pluginManagement {
     }
     plugins {
         // ИСПРАВЛЕННАЯ ВЕРСИЯ:
-        id("com.google.devtools.ksp") version "2.1.21-2.0.1"
+        id("com.google.devtools.ksp") version "2.3.2"
     }
 }
 plugins {
