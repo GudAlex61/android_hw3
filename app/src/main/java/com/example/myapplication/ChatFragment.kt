@@ -10,9 +10,11 @@ import android.view.*
 import android.view.inputmethod.EditorInfo
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat  // ← ДОБАВИТЬ
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Observer
+import org.json.JSONObject  // ← ДОБАВИТЬ
 import java.io.ByteArrayOutputStream
 import java.util.Locale
 
@@ -468,13 +470,6 @@ class ChatFragment : Fragment() {
     companion object {
         private const val MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
     }
-
-
-    private data class PendingAttachment(
-        val name: String,
-        val mimeType: String,
-        val bytes: ByteArray
-    )
 
     private fun resetSendButton() {
         sendButton.text = "↑"
