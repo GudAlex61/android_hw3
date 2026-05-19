@@ -1,12 +1,17 @@
 package com.example.myapplication
 
-import androidx.appcompat.app.AppCompatActivity
+import android.content.Intent
 import android.os.Bundle
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.Fragment
+import com.example.myapplication.auth.LoginActivity
+import com.example.myapplication.auth.SessionManager
 import com.google.android.material.bottomnavigation.BottomNavigationView
 
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var session: SessionManager
 
     private var chatFragment: ChatFragment? = null
     private var documentsFragment: DocumentsFragment? = null
@@ -14,13 +19,20 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        session = SessionManager(this)
+        if (!session.isLoggedIn()) {
+            val intent = Intent(this, LoginActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            startActivity(intent)
+            finish()
+            return
+        }
+
         setContentView(R.layout.activity_main)
 
-        // 1. Get the WindowInsetsController
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
-        // 2. Tell it that the appearance is light (so icons should be dark)
         windowInsetsController.isAppearanceLightStatusBars = true
-
 
         val bottomNavigationView = findViewById<BottomNavigationView>(R.id.bottom_navigation)
 
@@ -31,7 +43,6 @@ class MainActivity : AppCompatActivity() {
                 .commit()
             bottomNavigationView.selectedItemId = R.id.navigation_chat
         } else {
-            // Восстанавливаем ссылки на уже добавленные фрагменты после пересоздания Activity
             chatFragment = supportFragmentManager.findFragmentByTag("chat") as? ChatFragment
             documentsFragment = supportFragmentManager.findFragmentByTag("documents") as? DocumentsFragment
             profileFragment = supportFragmentManager.findFragmentByTag("profile") as? ProfileFragment
@@ -59,14 +70,12 @@ class MainActivity : AppCompatActivity() {
     private fun showFragment(tag: String) {
         val transaction = supportFragmentManager.beginTransaction()
 
-        // Скрываем все текущие видимые фрагменты
         supportFragmentManager.fragments.forEach { fragment ->
             if (!fragment.isHidden) {
                 transaction.hide(fragment)
             }
         }
 
-        // Показываем или добавляем нужный фрагмент
         val existing = supportFragmentManager.findFragmentByTag(tag)
         if (existing != null) {
             transaction.show(existing)
