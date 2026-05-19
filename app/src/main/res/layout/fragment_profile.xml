@@ -1,119 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@android:color/white"
-    android:fitsSystemWindows="true">
+    android:padding="16dp">
 
+    <!-- Toolbar -->
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/toolbar"
-        android:layout_marginTop="16dp"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="@android:color/white"
-        android:theme="?attr/actionBarTheme">
+        android:background="?attr/colorPrimary">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Профиль"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_gravity="center"/>
 
         <ImageButton
             android:id="@+id/settingsButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_gravity="end"
-            android:layout_marginEnd="16dp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:src="@drawable/ic_settings"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/action_settings" />
-
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/settings"
+            android:layout_gravity="end"
+            android:padding="12dp"/>
     </androidx.appcompat.widget.Toolbar>
 
-    <FrameLayout
+    <!-- Аватар -->
+    <ImageView
+        android:id="@+id/Avatar"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="24dp"
+        android:src="@drawable/circle_gray"
+        android:scaleType="centerCrop"
+        android:clickable="true"
+        android:focusable="true"
+        android:background="?attr/selectableItemBackgroundBorderless"/>
+
+    <!-- Email (только просмотр) -->
+    <TextView
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="wrap_content"
+        android:text="Email"
+        android:textStyle="bold"
+        android:layout_marginTop="24dp"
+        android:layout_marginBottom="4dp"/>
 
-        <ProgressBar
-            android:id="@+id/progressBar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:visibility="gone" />
+    <TextView
+        android:id="@+id/emailText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="user@example.com"
+        android:textSize="16sp"
+        android:padding="12dp"
+        android:background="@drawable/bg_card"/>
 
-        <TextView
-            android:id="@+id/errorText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="@string/error_load"
-            android:textColor="@android:color/holo_red_dark"
-            android:textSize="16sp"
-            android:gravity="center"
-            android:visibility="gone" />
+    <!-- ФИО (редактирование) -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="ФИО"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="4dp"/>
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="24dp">
+    <EditText
+        android:id="@+id/fullNameInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Введите ФИО"
+        android:inputType="textPersonName"
+        android:padding="12dp"
+        android:background="@drawable/bg_card"
+        android:maxLines="1"/>
 
-            <ImageView
-                android:id="@+id/Avatar"
-                android:layout_width="100dp"
-                android:layout_height="100dp"
-                android:src="@drawable/ic_profile"
-                android:scaleType="centerCrop"
-                android:layout_marginBottom="16dp"
-                android:background="@drawable/circle_gray"
-                android:contentDescription="@string/avatar_description" />
+    <!-- Дата рождения (редактирование, формат ДД.ММ.ГГГГ) -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Дата рождения"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="4dp"/>
 
-            <TextView
-                android:id="@+id/fullNameText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="24sp"
-                android:textStyle="bold"
-                android:textColor="@android:color/black"
-                android:gravity="center"
-                android:visibility="gone"
-                tools:text="@string/user_full_name_template"/>
+    <EditText
+        android:id="@+id/birthDateInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="ДД.ММ.ГГГГ"
+        android:inputType="number"
+        android:padding="12dp"
+        android:background="@drawable/bg_card"
+        android:maxLength="10"
+        android:maxLines="1"
+        android:digits="0123456789."/>
 
-            <TextView
-                android:id="@+id/birthDateText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textSize="18sp"
-                android:textColor="@android:color/black"
-                android:gravity="center"
-                android:visibility="gone"
-                tools:text="@string/user_birthday_template"/>
+    <!-- Паспорт (редактирование, перемещён выше кнопки) -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Номер паспорта"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="4dp"/>
 
-            <TextView
-                android:id="@+id/passportText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textSize="18sp"
-                android:textColor="@color/gray_400"
-                android:gravity="center"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="?android:attr/selectableItemBackground"
-                android:visibility="gone" />
+    <EditText
+        android:id="@+id/passportInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Например: 4501 123456"
+        android:inputType="textNoSuggestions"
+        android:padding="12dp"
+        android:background="@drawable/bg_card"
+        android:maxLines="1"/>
 
-            <TextView
-                android:id="@+id/hintText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="@string/auto_fill_hint"
-                android:textSize="14sp"
-                android:textColor="#999999"
-                android:gravity="center"
-                android:visibility="gone" />
+    <TextView
+        android:id="@+id/passportHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Введите данные паспорта вручную"
+        android:textSize="12sp"
+        android:layout_marginTop="4dp"
+        android:textColor="@android:color/darker_gray"/>
 
-        </LinearLayout>
+    <!-- Кнопка сохранения (теперь внизу) -->
+    <Button
+        android:id="@+id/saveButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Сохранить изменения"
+        android:layout_marginTop="24dp"
+        android:backgroundTint="@color/design_default_color_primary"
+        android:textColor="@android:color/white"/>
 
-    </FrameLayout>
+    <!-- ProgressBar и Error -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginTop="48dp"
+        android:visibility="gone"/>
+
+    <TextView
+        android:id="@+id/errorText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginTop="48dp"
+        android:textColor="@android:color/holo_red_dark"
+        android:visibility="gone"/>
+
+    <!-- Кнопка выхода (в самом низу) -->
+    <Button
+        android:id="@+id/logoutButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Выйти из аккаунта"
+        android:layout_marginTop="32dp"
+        android:layout_marginBottom="16dp"
+        android:backgroundTint="@android:color/holo_red_dark"
+        android:textColor="@android:color/white"/>
 
 </LinearLayout>
