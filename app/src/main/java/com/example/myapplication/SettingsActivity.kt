@@ -1,9 +1,9 @@
-// SettingsActivity.kt
 package com.example.myapplication
 
 import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -15,15 +15,21 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.core.view.WindowCompat
 import android.content.ClipboardManager
-import android.provider.Settings.System.getString
 import android.widget.Toast
+import com.example.myapplication.auth.LoginActivity
+import com.example.myapplication.auth.SessionManager
 
-// по лонгтапу на каждый элемент настроек - копировать в буфер обмена содержимое ячейки
+// По лонгтапу на каждый элемент настроек - копировать в буфер обмена содержимое ячейки
 class SettingsActivity : AppCompatActivity() {
+
+    private lateinit var sessionManager: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
+
+        // Инициализация сессии
+        sessionManager = SessionManager(this)
 
         // 1. Get the WindowInsetsController
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
@@ -39,6 +45,9 @@ class SettingsActivity : AppCompatActivity() {
         val recyclerView = findViewById<RecyclerView>(R.id.settingsRecyclerView)
         recyclerView.layoutManager = LinearLayoutManager(this)
 
+        // ✅ Получаем реальный email из сессии
+        val userEmail = sessionManager.getUserEmail() ?: "Не авторизован"
+
         val settings = listOf(
             Setting(getString(R.string.setting_language), getString(R.string.language_russian)),
             Setting(
@@ -50,7 +59,7 @@ class SettingsActivity : AppCompatActivity() {
                 getString(R.string.notifications_enabled)
             ),
             Setting(getString(R.string.setting_theme), getString(R.string.theme_light)),
-            Setting(getString(R.string.setting_account), getString(R.string.email)),
+            Setting(getString(R.string.setting_account), userEmail),  // ✅ Реальный email
             Setting(getString(R.string.setting_about), getString(R.string.version))
         )
 
@@ -81,7 +90,7 @@ class SettingsActivity : AppCompatActivity() {
             holder.itemView.setOnLongClickListener {
                 copyToClipboard(
                     it.context,
-                    holder.subtitle.text as String
+                    holder.subtitle.text.toString()
                 )
                 true
             }

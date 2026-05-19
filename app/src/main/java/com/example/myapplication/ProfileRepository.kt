@@ -1,39 +1,45 @@
+// File: app/src/main/java/com/example/myapplication/ProfileRepository.kt
 package com.example.myapplication
 
-import kotlinx.coroutines.delay
+import com.example.myapplication.data.UserDao
+import com.example.myapplication.data.UserEntity
 
-interface ProfileRepository {
-    suspend fun getProfile(userId: String): UserProfile?
-    suspend fun updatePassport(userId: String, passportNumber: String)
-    suspend fun updateAvatar(userId: String, avatarPath: String)
-}
+class ProfileRepository(private val userDao: UserDao) {
 
-class FakeProfileRepository(
-    defaultFullName: String,
-    defaultBirthDate: String
-) : ProfileRepository {
+    suspend fun getUserByEmail(email: String): UserProfile? {
+        val entity = userDao.getUserByEmail(email)
+        return entity?.toUserProfile()
+    }
 
-    private var profile = UserProfile(
-        userId = "demo_user",
-        fullName = defaultFullName,
-        birthDate = defaultBirthDate,
-        passportNumber = null,
-        avatarPath = null
+    suspend fun updateUserProfile(profile: UserProfile): Boolean {
+        return try {
+            val entity = profile.toUserEntity()
+            userDao.update(entity)
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    // Конвертеры между Entity и Model
+    private fun UserEntity.toUserProfile(): UserProfile = UserProfile(
+        id = id,
+        email = email,
+        password = password,
+        fullName = fullName,
+        birthDate = birthDate,
+        passportNumber = passportNumber,
+        avatarUri = avatarUri
     )
 
-    override suspend fun getProfile(userId: String): UserProfile? {
-        return if (profile.userId == userId) profile else null
-    }
-
-    override suspend fun updatePassport(userId: String, passportNumber: String) {
-        if (profile.userId == userId) {
-            profile = profile.copy(passportNumber = passportNumber)
-        }
-    }
-
-    override suspend fun updateAvatar(userId: String, avatarPath: String) {
-        if (profile.userId == userId) {
-            profile = profile.copy(avatarPath = avatarPath)
-        }
-    }
+    private fun UserProfile.toUserEntity(): UserEntity = UserEntity(
+        id = id,
+        email = email,
+        password = password,
+        fullName = fullName,
+        birthDate = birthDate,
+        passportNumber = passportNumber,
+        avatarUri = avatarUri
+    )
 }
