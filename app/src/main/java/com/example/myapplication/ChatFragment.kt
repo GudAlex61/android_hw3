@@ -2,75 +2,25 @@ package com.example.myapplication
 
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.util.TypedValue
-import android.view.Gravity
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
+import android.view.*
 import android.view.inputmethod.EditorInfo
 import android.widget.*
-import androidx.core.content.ContextCompat
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
-import kotlinx.coroutines.*
-import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.*
+import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.Observer
+import java.io.ByteArrayOutputStream
+import java.util.Locale
 
-// сохранение состояния при повороте
 class ChatFragment : Fragment() {
 
-    data class Message(
-        val text: String,
-        val isUser: Boolean,
-        val time: String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-    )
-
-    data class Chat(
-        val id: String = UUID.randomUUID().toString(),
-        val messages: MutableList<Message> = mutableListOf(),
-        val createdAt: String = SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date())
-    ) {
-        fun getTitle(): String {
-            val lastUserMessage = messages.lastOrNull { it.isUser }
-            return if (lastUserMessage != null) {
-                val text = lastUserMessage.text
-                if (text.length > 40) text.substring(0, 40) + "..." else text
-            } else {
-                "Новый чат"
-            }
-        }
-
-        fun getLastMessageTime(): String {
-            return messages.lastOrNull()?.time ?: createdAt
-        }
-
-        fun getShortPreview(): String {
-            return messages.firstOrNull()?.text?.take(60) ?: "Пустой чат"
-        }
-
-        fun isUnread(): Boolean {
-            return messages.size == 1 && messages[0].isUser
-        }
-    }
-
-    private val chatHistory = mutableListOf<Chat>()
-    private var currentChatIndex = 0
-
-    private fun getCurrentChat(): Chat {
-        if (chatHistory.isEmpty()) {
-            chatHistory.add(Chat())
-        }
-        return chatHistory[currentChatIndex]
-    }
-
-    private fun getCurrentMessages(): MutableList<Message> {
-        return getCurrentChat().messages
-    }
+    // activityViewModels() — ViewModel живёт пока жива Activity,
+    // а не фрагмент, поэтому история не теряется при смене вкладок
+    private val viewModel: ChatViewModel by activityViewModels()
 
     private lateinit var messagesContainer: LinearLayout
     private lateinit var scrollView: ScrollView
@@ -79,6 +29,11 @@ class ChatFragment : Fragment() {
     private lateinit var newChatButton: TextView
     private lateinit var attachButton: TextView
     private lateinit var menuButton: TextView
+
+    private lateinit var attachmentPreviewContainer: LinearLayout
+    private lateinit var attachmentIcon: TextView
+    private lateinit var attachmentName: TextView
+    private lateinit var removeAttachmentButton: TextView
 
     private lateinit var welcomeContainer: LinearLayout
     private lateinit var chatContainer: FrameLayout
@@ -89,9 +44,16 @@ class ChatFragment : Fragment() {
     private lateinit var historyAdapter: ChatHistoryAdapter
 
     private var isFirstMessage = true
+    private var pendingAttachment: PendingAttachment? = null
+
+    private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { handleSelectedFile(it) }
+    }
 
     override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
     ): View? {
         return inflater.inflate(R.layout.fragment_chat, container, false)
     }
@@ -105,6 +67,11 @@ class ChatFragment : Fragment() {
         attachButton = view.findViewById(R.id.attachButton)
         menuButton = view.findViewById(R.id.menuButton)
 
+        attachmentPreviewContainer = view.findViewById(R.id.attachmentPreviewContainer)
+        attachmentIcon = view.findViewById(R.id.attachmentIcon)
+        attachmentName = view.findViewById(R.id.attachmentName)
+        removeAttachmentButton = view.findViewById(R.id.removeAttachmentButton)
+
         welcomeContainer = view.findViewById(R.id.welcomeContainer)
         chatContainer = view.findViewById(R.id.messagesContainer)
 
@@ -112,83 +79,48 @@ class ChatFragment : Fragment() {
         closeMenuButton = view.findViewById(R.id.closeMenuButton)
         chatHistoryList = view.findViewById(R.id.chatHistoryList)
 
-        initChatHistory()
         initMessagesContainer(view)
-
+        setupAttachmentPreviewStyle()
         setupClickListeners()
         setupHistoryMenu()
-
-        chatContainer.visibility = View.GONE
-        welcomeContainer.visibility = View.VISIBLE
+        observeViewModel()
+        updateUIForCurrentChat()
     }
 
-    private fun initChatHistory() {
-        if (chatHistory.isEmpty()) {
-            chatHistory.add(Chat())
-        }
+    private fun observeViewModel() {
+        viewModel.chatHistory.observe(viewLifecycleOwner, Observer {
+            updateHistoryList()
+            updateUIForCurrentChat()
+        })
 
-        historyAdapter = ChatHistoryAdapter(requireContext(), chatHistory)
-        chatHistoryList.adapter = historyAdapter
+        viewModel.currentChatIndex.observe(viewLifecycleOwner, Observer {
+            updateHistoryList()
+            updateUIForCurrentChat()
+            clearPendingAttachment()
+        })
+
+        viewModel.isLoading.observe(viewLifecycleOwner, Observer { loading ->
+            sendButton.text = if (loading) "⌛" else "↑"
+            sendButton.isEnabled = !loading
+            attachButton.isEnabled = !loading
+            attachButton.alpha = if (loading) 0.5f else 1f
+        })
     }
 
-    private inner class ChatHistoryAdapter(
-        context: android.content.Context, private val chats: List<Chat>
-    ) : ArrayAdapter<Chat>(context, 0, chats) {
-
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val chat = chats[position]
-
-            val view = convertView ?: LayoutInflater.from(context)
-                .inflate(android.R.layout.simple_list_item_1, parent, false)
-
-            val textView = view.findViewById<TextView>(android.R.id.text1)
-
-            val background = GradientDrawable().apply {
-                cornerRadius = dpToPx(12).toFloat()
-                if (position == currentChatIndex) {
-                    setColor(ContextCompat.getColor(context, R.color.chat_history_selected_bg))
-                } else if (chat.isUnread()) {
-                    setColor(ContextCompat.getColor(context, R.color.chat_history_unread_bg))
-                } else {
-                    setColor(ContextCompat.getColor(context, R.color.chat_history_default_bg))
-                }
-                setStroke(dpToPx(1), ContextCompat.getColor(context, R.color.chat_history_border))
+    private fun updateUIForCurrentChat() {
+        val chat = viewModel.getCurrentChat()
+        clearChatUI()
+        if (chat.messages.isNotEmpty()) {
+            welcomeContainer.visibility = View.GONE
+            chatContainer.visibility = View.VISIBLE
+            isFirstMessage = false
+            for (message in chat.messages) {
+                addMessageToUI(message)
             }
-
-            textView.apply {
-                val title = chat.getTitle()
-                val time = chat.getLastMessageTime()
-//                val preview = chat.getShortPreview()
-
-                text = if (chat.messages.isEmpty()) {
-                    context.getString(R.string.empty_chat_title)
-                } else {
-                    "$title $time"
-                }
-
-                this.background = background
-                setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12))
-                textSize = 18f
-                maxLines = 5
-                gravity = Gravity.START
-                isSingleLine = false
-
-                if (position == currentChatIndex) {
-                    setTextColor(ContextCompat.getColor(context, R.color.current_chat_title))
-                    setTypeface(null, Typeface.BOLD)
-                } else if (chat.isUnread()) {
-                    setTextColor(ContextCompat.getColor(context, R.color.unread_chat_title))
-                    setTypeface(null, Typeface.BOLD)
-                } else {
-                    setTextColor(ContextCompat.getColor(context, R.color.chat_title))
-                    setTypeface(null, Typeface.NORMAL)
-                }
-
-
-                minimumHeight = dpToPx(80)
-            }
-
-            return view
+        } else {
+            welcomeContainer.visibility = View.VISIBLE
+            chatContainer.visibility = View.VISIBLE
+            isFirstMessage = true
         }
     }
 
@@ -197,7 +129,8 @@ class ChatFragment : Fragment() {
 
         scrollView = ScrollView(requireContext()).apply {
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
             )
             isVerticalScrollBarEnabled = true
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -206,7 +139,8 @@ class ChatFragment : Fragment() {
         messagesContainer = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
             )
             setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
         }
@@ -215,9 +149,15 @@ class ChatFragment : Fragment() {
         chatContainer.addView(scrollView)
     }
 
+    private fun setupAttachmentPreviewStyle() {
+        attachmentPreviewContainer.background = roundedBackground(0xFFFFFFFF.toInt(), dpToPx(16))
+    }
+
     private fun dpToPx(dp: Int): Int {
         return TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), resources.displayMetrics
+            TypedValue.COMPLEX_UNIT_DIP,
+            dp.toFloat(),
+            resources.displayMetrics
         ).toInt()
     }
 
@@ -227,38 +167,122 @@ class ChatFragment : Fragment() {
         }
 
         newChatButton.setOnClickListener {
-            createNewChat()
+            clearPendingAttachment()
+            viewModel.createNewChat()
         }
 
-        menuButton.setOnClickListener {
-            showHistoryMenu()
-        }
+        menuButton.setOnClickListener { showHistoryMenu() }
+
+        removeAttachmentButton.setOnClickListener { clearPendingAttachment() }
 
         attachButton.setOnClickListener {
-            Toast.makeText(
-                requireContext(),
-                context?.getString(R.string.attach_function_toast),
-                Toast.LENGTH_SHORT
-            ).show()
+            filePickerLauncher.launch(
+                arrayOf(
+                    "image/*",
+                    "application/pdf",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+            )
         }
 
         messageInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND) {
                 sendMessage()
                 true
-            } else {
-                false
-            }
+            } else false
         }
     }
 
-    private fun setupHistoryMenu() {
-        closeMenuButton.setOnClickListener {
-            hideHistoryMenu()
+    private fun handleSelectedFile(uri: Uri) {
+        val fileName = getFileName(uri) ?: "file"
+        val mimeType = requireContext().contentResolver.getType(uri) ?: guessMimeType(fileName)
+
+        if (!isSupportedFile(fileName, mimeType)) {
+            Toast.makeText(requireContext(), "Поддерживаются только фото, PDF и DOCX", Toast.LENGTH_LONG).show()
+            return
         }
 
+        val bytes = runCatching { readUriBytes(uri) }.getOrNull()
+        if (bytes == null || bytes.isEmpty()) {
+            Toast.makeText(requireContext(), "Не удалось прочитать файл", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        if (bytes.size > MAX_FILE_SIZE_BYTES) {
+            Toast.makeText(requireContext(), "Файл слишком большой. Максимум 20 МБ", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        pendingAttachment = PendingAttachment(fileName, mimeType, bytes)
+        showPendingAttachment()
+    }
+
+    private fun showPendingAttachment() {
+        val attachment = pendingAttachment ?: return
+        attachmentIcon.text = iconForMime(attachment.name, attachment.mimeType)
+        attachmentName.text = attachment.name
+        attachmentPreviewContainer.visibility = View.VISIBLE
+    }
+
+    private fun clearPendingAttachment() {
+        pendingAttachment = null
+        if (::attachmentPreviewContainer.isInitialized) {
+            attachmentPreviewContainer.visibility = View.GONE
+            attachmentName.text = ""
+            attachmentIcon.text = "📎"
+        }
+    }
+
+    private fun readUriBytes(uri: Uri): ByteArray {
+        requireContext().contentResolver.openInputStream(uri)?.use { input ->
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read == -1) break
+                output.write(buffer, 0, read)
+            }
+            return output.toByteArray()
+        }
+        throw IllegalArgumentException("InputStream is null")
+    }
+
+    private fun getFileName(uri: Uri): String? {
+        var name: String? = null
+        requireContext().contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (cursor.moveToFirst() && nameIndex != -1) {
+                name = cursor.getString(nameIndex)
+            }
+        }
+        return name
+    }
+
+    private fun guessMimeType(fileName: String): String {
+        val lower = fileName.lowercase(Locale.US)
+        return when {
+            lower.endsWith(".jpg") || lower.endsWith(".jpeg") -> "image/jpeg"
+            lower.endsWith(".png") -> "image/png"
+            lower.endsWith(".webp") -> "image/webp"
+            lower.endsWith(".gif") -> "image/gif"
+            lower.endsWith(".pdf") -> "application/pdf"
+            lower.endsWith(".docx") -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            else -> "application/octet-stream"
+        }
+    }
+
+    private fun isSupportedFile(fileName: String, mimeType: String): Boolean {
+        val lower = fileName.lowercase(Locale.US)
+        return mimeType.startsWith("image/") ||
+                mimeType == "application/pdf" || lower.endsWith(".pdf") ||
+                mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || lower.endsWith(".docx")
+    }
+
+    private fun setupHistoryMenu() {
+        closeMenuButton.setOnClickListener { hideHistoryMenu() }
+
         chatHistoryList.setOnItemClickListener { _, _, position, _ ->
-            switchToChat(position)
+            viewModel.switchToChat(position)
             hideHistoryMenu()
         }
     }
@@ -272,105 +296,55 @@ class ChatFragment : Fragment() {
         historyMenu.visibility = View.GONE
     }
 
-    private fun createNewChat() {
-        val currentMessages = getCurrentMessages()
-        if (currentMessages.isEmpty()) {
-            Toast.makeText(
-                requireContext(),
-                context?.getString(R.string.error_current_chat_empty),
-                Toast.LENGTH_SHORT
-            ).show()
+    private fun sendMessage() {
+        val text = messageInput.text.toString().trim()
+        val attachment = pendingAttachment
+
+        if (attachment != null) {
+            messageInput.text.clear()
+            clearPendingAttachment()
+            viewModel.sendFile(attachment.name, attachment.mimeType, attachment.bytes, text)
             return
         }
 
-        val newChat = Chat()
-        chatHistory.add(newChat)
-        currentChatIndex = chatHistory.size - 1
-
-        clearChatUI()
-
-        welcomeContainer.visibility = View.VISIBLE
-        chatContainer.visibility = View.GONE
-        isFirstMessage = true
-
-        updateHistoryList()
-        Toast.makeText(
-            requireContext(),
-            context?.getString(R.string.toast_new_chat_created),
-            Toast.LENGTH_SHORT
-        ).show()
-    }
-
-    private fun switchToChat(index: Int) {
-        if (index in chatHistory.indices && index != currentChatIndex) {
-            currentChatIndex = index
-            val chat = getCurrentChat()
-
-            clearChatUI()
-
-            if (chat.messages.isNotEmpty()) {
-                welcomeContainer.visibility = View.GONE
-                chatContainer.visibility = View.VISIBLE
-                isFirstMessage = false
-
-                for (message in chat.messages) {
-                    addMessageToUI(message)
-                }
-            } else {
-                welcomeContainer.visibility = View.VISIBLE
-                chatContainer.visibility = View.VISIBLE
-                isFirstMessage = true
-            }
-
-            updateHistoryList()
-        }
-    }
-
-    private fun sendMessage() {
-        val text = messageInput.text.toString().trim()
         if (text.isNotEmpty()) {
-            if (isFirstMessage) {
-                isFirstMessage = false
-                welcomeContainer.visibility = View.GONE
-                chatContainer.visibility = View.VISIBLE
-            }
-
-            addMessage(text, true)
+            viewModel.sendMessage(text, true)
             messageInput.text.clear()
-            getAIResponse(text)
         }
-    }
-
-    private fun addMessage(text: String, isUser: Boolean) {
-        val message = Message(text, isUser)
-        getCurrentMessages().add(message)
-        addMessageToUI(message)
-
-        scrollView.postDelayed({
-            scrollView.fullScroll(View.FOCUS_DOWN)
-        }, 100)
-
-        updateHistoryList()
     }
 
     private fun addMessageToUI(message: Message) {
         val messageLayout = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 topMargin = dpToPx(8)
                 bottomMargin = dpToPx(8)
             }
         }
 
-        val messageText = TextView(requireContext()).apply {
-            this.text = message.text
-            textSize = 16f
-            setPadding(dpToPx(16), dpToPx(12), dpToPx(16), dpToPx(12))
+        val bubbleContainer = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(14), dpToPx(10), dpToPx(14), dpToPx(10))
+            val maxWidth = (resources.displayMetrics.widthPixels * 0.76).toInt()
+        }
 
-            val maxWidth = (resources.displayMetrics.widthPixels * 0.7).toInt()
-            this.maxWidth = maxWidth
+        if (message.attachmentName != null) {
+            bubbleContainer.addView(createAttachmentChip(message.attachmentName, message.attachmentMimeType))
+        }
+
+        if (message.text.isNotBlank()) {
+            val messageText = TextView(requireContext()).apply {
+                text = message.text
+                textSize = 16f
+                setTextColor(if (message.isUser) 0xFFFFFFFF.toInt() else 0xFF000000.toInt())
+                if (message.attachmentName != null) {
+                    setPadding(0, dpToPx(8), 0, 0)
+                }
+            }
+            bubbleContainer.addView(messageText)
         }
 
         val timeText = TextView(requireContext()).apply {
@@ -383,150 +357,124 @@ class ChatFragment : Fragment() {
         val textContainer = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
             )
         }
 
-        textContainer.addView(messageText)
+        textContainer.addView(bubbleContainer)
         textContainer.addView(timeText)
 
         if (message.isUser) {
             messageLayout.gravity = Gravity.END
-
             messageLayout.addView(View(requireContext()).apply {
                 layoutParams = LinearLayout.LayoutParams(0, 0).apply {
                     weight = 1f
                 }
             })
-
-            messageText.setBackgroundResource(R.drawable.bubble_user)
-            messageText.setTextColor(
-                ContextCompat.getColor(
-                    requireContext(), R.color.message_user_text
-                )
-            )
+            bubbleContainer.background = roundedBackground(0xFFF59E0B.toInt(), dpToPx(18))
             messageLayout.addView(textContainer)
         } else {
             messageLayout.gravity = Gravity.START
-
             val botIcon = TextView(requireContext()).apply {
                 text = context?.getString(R.string.ai_bot_emoji)
                 textSize = 24f
                 setPadding(0, dpToPx(4), dpToPx(8), 0)
                 layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
                 )
             }
             messageLayout.addView(botIcon)
-
-            messageText.setBackgroundResource(R.drawable.bubble_bot)
-            messageText.setTextColor(
-                ContextCompat.getColor(
-                    requireContext(), R.color.message_bot_text
-                )
-            )
+            bubbleContainer.background = roundedBackground(0xFFE5E7EB.toInt(), dpToPx(18))
             messageLayout.addView(textContainer)
-
             messageLayout.addView(View(requireContext()).apply {
-                layoutParams = LinearLayout.LayoutParams(0, 0).apply {
-                    weight = 1f
-                }
+                layoutParams = LinearLayout.LayoutParams(0, 0).apply { weight = 1f }
             })
         }
 
         messagesContainer.addView(messageLayout)
+        scrollView.post { scrollView.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    private fun createAttachmentChip(fileName: String, mimeType: String?): View {
+        val chip = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
+            background = roundedBackground(0x22FFFFFF, dpToPx(14))
+        }
+
+        val icon = TextView(requireContext()).apply {
+            text = iconForMime(fileName, mimeType)
+            textSize = 22f
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(dpToPx(30), dpToPx(30))
+        }
+
+        val name = TextView(requireContext()).apply {
+            text = fileName
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(0xFFFFFFFF.toInt())
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                weight = 1f
+                leftMargin = dpToPx(8)
+            }
+        }
+
+        chip.addView(icon)
+        chip.addView(name)
+        return chip
+    }
+
+    private fun iconForMime(fileName: String, mimeType: String?): String {
+        val lower = fileName.lowercase(Locale.US)
+        return when {
+            mimeType?.startsWith("image/") == true || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp") -> "🖼️"
+            mimeType == "application/pdf" || lower.endsWith(".pdf") -> "📕"
+            mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || lower.endsWith(".docx") -> "📄"
+            else -> "📎"
+        }
+    }
+
+    private fun roundedBackground(color: Int, radiusPx: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radiusPx.toFloat()
+            setColor(color)
+        }
     }
 
     private fun clearChatUI() {
         messagesContainer.removeAllViews()
     }
 
-    private fun clearChat() {
-        getCurrentMessages().clear()
-        clearChatUI()
-        isFirstMessage = true
-
-        welcomeContainer.visibility = View.VISIBLE
-        chatContainer.visibility = View.GONE
-
-        updateHistoryList()
-        Toast.makeText(
-            requireContext(), context?.getString(R.string.toast_chat_cleared), Toast.LENGTH_SHORT
-        ).show()
-    }
-
     private fun updateHistoryList() {
-        historyAdapter.notifyDataSetChanged()
+        val currentIndex = viewModel.currentChatIndex.value ?: 0
+        val chats = viewModel.chatHistory.value ?: listOf()
+        historyAdapter = ChatHistoryAdapter(requireContext(), chats, currentIndex)
+        chatHistoryList.adapter = historyAdapter
     }
 
-    private fun getAIResponse(userMessage: String) {
-        sendButton.text = "⌛"
-        sendButton.isEnabled = false
+    private data class PendingAttachment(
+        val name: String,
+        val mimeType: String,
+        val bytes: ByteArray
+    )
 
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val json = JSONObject().apply {
-                    put("model", "openai/gpt-3.5-turbo")
-                    put("max_tokens", 500)
-
-                    val messagesArray = JSONArray().apply {
-
-                        put(JSONObject().apply {
-                            put("role", "system")
-                            put(
-                                "content",
-                                context?.getString(R.string.ai_system_prompt)?.trimIndent()
-                            )
-                        })
-                        put(JSONObject().apply {
-                            put("role", "user")
-                            put("content", userMessage)
-                        })
-                    }
-                    put("messages", messagesArray)
-                }
-
-                // БЕЗОПАСНОЕ ИСПОЛЬЗОВАНИЕ API КЛЮЧА
-                val apiKey = BuildConfig.OPENROUTER_API_KEY
-
-                val request = Request.Builder().url("https://openrouter.ai/api/v1/chat/completions")
-                    .addHeader("Authorization", "Bearer $apiKey")
-                    .addHeader("Content-Type", "application/json")
-                    .post(json.toString().toRequestBody("application/json".toMediaType())).build()
-
-                val client =
-                    OkHttpClient.Builder().connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS).build()
-
-                val response = client.newCall(request).execute()
-
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string()
-                    val aiResponse = parseAIResponse(responseBody)
-
-                    withContext(Dispatchers.Main) {
-                        addMessage(aiResponse, false)
-                        resetSendButton()
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        addMessage(
-                            context?.getString(R.string.error_api_code, response.code)
-                                ?: "API Error", false
-                        )
-                        resetSendButton()
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    addMessage(
-                        context?.getString(R.string.error_connection) ?: "Connection Error", false
-                    )
-                    resetSendButton()
-                }
-            }
-        }
+    companion object {
+        private const val MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
     }
+
+
+    private data class PendingAttachment(
+        val name: String,
+        val mimeType: String,
+        val bytes: ByteArray
+    )
 
     private fun resetSendButton() {
         sendButton.text = "↑"
