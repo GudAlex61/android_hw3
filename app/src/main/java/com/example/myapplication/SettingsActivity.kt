@@ -1,9 +1,7 @@
 package com.example.myapplication
 
-import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.Context
-import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -16,10 +14,8 @@ import android.widget.TextView
 import androidx.core.view.WindowCompat
 import android.content.ClipboardManager
 import android.widget.Toast
-import com.example.myapplication.auth.LoginActivity
 import com.example.myapplication.auth.SessionManager
 
-// По лонгтапу на каждый элемент настроек - копировать в буфер обмена содержимое ячейки
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var sessionManager: SessionManager
@@ -55,8 +51,7 @@ class SettingsActivity : AppCompatActivity() {
                 getString(R.string.consultation_civil_law)
             ),
             Setting(
-                getString(R.string.setting_notifications),
-                getString(R.string.notifications_enabled)
+                getString(R.string.setting_notifications), getString(R.string.notifications_enabled)
             ),
             Setting(getString(R.string.setting_theme), getString(R.string.theme_light)),
             Setting(getString(R.string.setting_account), userEmail),  // ✅ Реальный email
@@ -71,14 +66,14 @@ class SettingsActivity : AppCompatActivity() {
     class SettingsAdapter(private val items: List<Setting>) :
         RecyclerView.Adapter<SettingsAdapter.ViewHolder>() {
 
-        inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val title = view.findViewById<TextView>(R.id.title)
-            val subtitle = view.findViewById<TextView>(R.id.subtitle)
+        class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
+            val title: TextView = view.findViewById(R.id.title)
+            val subtitle: TextView = view.findViewById(R.id.subtitle)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_setting, parent, false)
+            val view =
+                LayoutInflater.from(parent.context).inflate(R.layout.item_setting, parent, false)
             return ViewHolder(view)
         }
 
@@ -89,8 +84,7 @@ class SettingsActivity : AppCompatActivity() {
 
             holder.itemView.setOnLongClickListener {
                 copyToClipboard(
-                    it.context,
-                    holder.subtitle.text.toString()
+                    it.context, holder.subtitle.text.toString()
                 )
                 true
             }

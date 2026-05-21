@@ -33,10 +33,11 @@ import java.util.zip.ZipInputStream
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import kotlin.math.roundToInt
+import androidx.core.graphics.scale
 
 class ChatViewModel : ViewModel() {
 
-    private val _chatHistory = MutableLiveData<MutableList<Chat>>(mutableListOf(Chat()))
+    private val _chatHistory = MutableLiveData(mutableListOf(Chat()))
     val chatHistory: LiveData<MutableList<Chat>> = _chatHistory
 
     private val _currentChatIndex = MutableLiveData(0)
@@ -45,11 +46,8 @@ class ChatViewModel : ViewModel() {
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
-        .writeTimeout(120, TimeUnit.SECONDS)
-        .build()
+    private val client: OkHttpClient = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS).writeTimeout(120, TimeUnit.SECONDS).build()
 
     fun getCurrentChat(): Chat {
         return _chatHistory.value?.getOrElse(_currentChatIndex.value ?: 0) { Chat() } ?: Chat()
@@ -119,13 +117,15 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    private fun getAIResponseWithFile(fileName: String, mimeType: String, bytes: ByteArray, userPrompt: String) {
+    private fun getAIResponseWithFile(
+        fileName: String, mimeType: String, bytes: ByteArray, userPrompt: String
+    ) {
         _isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val prompt = buildFilePrompt(fileName, mimeType, userPrompt)
                 val payload = when {
-                    isImageMime(mimeType) -> buildImagePayload(fileName, bytes, prompt)
+                    isImageMime(mimeType) -> buildImagePayload(bytes, prompt)
                     isPdf(fileName, mimeType) -> buildPdfPayload(fileName, bytes, prompt)
                     isDocx(fileName, mimeType) -> buildDocxPayload(fileName, bytes, prompt)
                     else -> throw IllegalArgumentException("Поддерживаются только изображения, PDF и DOCX")
@@ -139,7 +139,12 @@ class ChatViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    addMessage(Message(text = "Не удалось обработать файл: ${friendlyErrorMessage(e)}", isUser = false))
+                    addMessage(
+                        Message(
+                            text = "Не удалось обработать файл: ${friendlyErrorMessage(e)}",
+                            isUser = false
+                        )
+                    )
                     _isLoading.value = false
                 }
             }
@@ -151,8 +156,7 @@ class ChatViewModel : ViewModel() {
      * Стратегия: до 3 попыток с экспоненциальной задержкой 2с → 4с → 8с.
      */
     private suspend fun executeOpenRouterRequestWithRetry(
-        payload: JSONObject,
-        maxAttempts: Int = 1
+        payload: JSONObject, maxAttempts: Int = 1
     ): String {
         var lastException: Exception? = null
 
@@ -176,7 +180,8 @@ class ChatViewModel : ViewModel() {
             // Остальные исключения бросаем сразу без retry
         }
 
-        throw lastException ?: IllegalStateException("Неизвестная ошибка после $maxAttempts попыток")
+        throw lastException
+            ?: IllegalStateException("Неизвестная ошибка после $maxAttempts попыток")
     }
 
     private fun buildTextPayload(userMessage: String): JSONObject {
@@ -196,7 +201,7 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    private fun buildImagePayload(fileName: String, originalBytes: ByteArray, prompt: String): JSONObject {
+    private fun buildImagePayload(originalBytes: ByteArray, prompt: String): JSONObject {
         ensureS3Configured()
         val jpegBytes = compressImageHighQuality(originalBytes)
         val key = "mobile_uploads/images/${UUID.randomUUID().toString().replace("-", "")}.jpg"
@@ -216,7 +221,9 @@ class ChatViewModel : ViewModel() {
                     put("content", JSONArray().apply {
                         put(JSONObject().apply {
                             put("type", "text")
-                            put("text", prompt.ifBlank { "Опиши изображение и извлеки весь видимый текст." })
+                            put(
+                                "text",
+                                prompt.ifBlank { "Опиши изображение и извлеки весь видимый текст." })
                         })
                         put(JSONObject().apply {
                             put("type", "image_url")
@@ -249,7 +256,9 @@ class ChatViewModel : ViewModel() {
                     put("content", JSONArray().apply {
                         put(JSONObject().apply {
                             put("type", "text")
-                            put("text", prompt.ifBlank { "Проанализируй PDF-документ. Извлеки ключевые факты, юридически значимые условия, риски и краткий вывод." })
+                            put(
+                                "text",
+                                prompt.ifBlank { "Проанализируй PDF-документ. Извлеки ключевые факты, юридически значимые условия, риски и краткий вывод." })
                         })
                         put(JSONObject().apply {
                             put("type", "file")
@@ -276,9 +285,7 @@ class ChatViewModel : ViewModel() {
         ensureS3Configured()
         val key = "mobile_uploads/documents/${UUID.randomUUID().toString().replace("-", "")}.docx"
         val uploaded = uploadBytesToS3AndGetPresignedUrl(
-            bytes,
-            key,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            bytes, key, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
         scheduleS3DeleteIfNeeded(uploaded.key)
 
@@ -294,7 +301,8 @@ class ChatViewModel : ViewModel() {
             append("\nВременная ссылка на исходный файл в S3: ").append(uploaded.presignedUrl)
             append("\n\nТекст DOCX:\n").append(textForModel)
             if (extractedText.length > MAX_DOCX_CHARS) {
-                append("\n\n[Текст обрезан до первых ").append(MAX_DOCX_CHARS).append(" символов из-за ограничения контекста.]")
+                append("\n\n[Текст обрезан до первых ").append(MAX_DOCX_CHARS)
+                    .append(" символов из-за ограничения контекста.]")
             }
         }
 
@@ -307,12 +315,10 @@ class ChatViewModel : ViewModel() {
             throw IllegalStateException("OPENROUTER_API_KEY не задан в BuildConfig/local.properties")
         }
 
-        val request = Request.Builder()
-            .url("https://openrouter.ai/api/v1/chat/completions")
+        val request = Request.Builder().url("https://openrouter.ai/api/v1/chat/completions")
             .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
-            .post(payload.toString().toRequestBody("application/json".toMediaType()))
-            .build()
+            .post(payload.toString().toRequestBody("application/json".toMediaType())).build()
 
         client.newCall(request).execute().use { response ->
             val responseBody = response.body?.string()
@@ -322,10 +328,22 @@ class ChatViewModel : ViewModel() {
                 throw RateLimitException("Превышен лимит запросов (429): ${responseBody?.take(200) ?: ""}")
             }
             if (response.code == 504) {
-                throw GatewayTimeoutException("Сервер не ответил вовремя (504): ${responseBody?.take(200) ?: ""}")
+                throw GatewayTimeoutException(
+                    "Сервер не ответил вовремя (504): ${
+                        responseBody?.take(
+                            200
+                        ) ?: ""
+                    }"
+                )
             }
             if (!response.isSuccessful) {
-                throw IllegalStateException("OpenRouter API вернул ${response.code}: ${responseBody?.take(250) ?: "пустой ответ"}")
+                throw IllegalStateException(
+                    "OpenRouter API вернул ${response.code}: ${
+                        responseBody?.take(
+                            250
+                        ) ?: "пустой ответ"
+                    }"
+                )
             }
             return parseAIResponse(responseBody)
         }
@@ -356,22 +374,26 @@ class ChatViewModel : ViewModel() {
      */
     private fun friendlyErrorMessage(e: Exception): String {
         return when (e) {
-            is RateLimitException ->
-                "Сервис временно перегружен. Попробуйте через несколько секунд."
-            is GatewayTimeoutException ->
-                "Сервер не успел ответить. Попробуйте повторить запрос — обычно помогает с 1–2 попытки."
+            is RateLimitException -> "Сервис временно перегружен. Попробуйте через несколько секунд."
+
+            is GatewayTimeoutException -> "Сервер не успел ответить. Попробуйте повторить запрос — обычно помогает с 1–2 попытки."
+
             else -> e.message ?: "Неизвестная ошибка"
         }
     }
 
     private fun buildFilePrompt(fileName: String, mimeType: String, userPrompt: String): String {
-        return if (userPrompt.isNotBlank()) {
-            userPrompt
-        } else {
+        return userPrompt.ifBlank {
             when {
                 isImageMime(mimeType) -> "Опиши изображение, извлеки весь читаемый текст и укажи, есть ли на нём юридически значимая информация. Файл: $fileName"
-                isPdf(fileName, mimeType) -> "Проанализируй PDF-документ как юридический консультант. Кратко выдели суть, стороны, даты, суммы, обязательства, риски и что стоит проверить. Файл: $fileName"
-                isDocx(fileName, mimeType) -> "Проанализируй DOCX-документ как юридический консультант. Кратко выдели суть, стороны, даты, суммы, обязательства, риски и что стоит проверить. Файл: $fileName"
+                isPdf(
+                    fileName, mimeType
+                ) -> "Проанализируй PDF-документ как юридический консультант. Кратко выдели суть, стороны, даты, суммы, обязательства, риски и что стоит проверить. Файл: $fileName"
+
+                isDocx(
+                    fileName, mimeType
+                ) -> "Проанализируй DOCX-документ как юридический консультант. Кратко выдели суть, стороны, даты, суммы, обязательства, риски и что стоит проверить. Файл: $fileName"
+
                 else -> "Проанализируй файл: $fileName"
             }
         }
@@ -398,15 +420,14 @@ class ChatViewModel : ViewModel() {
 
     private fun compressImageHighQuality(imageData: ByteArray): ByteArray {
         return try {
-            val bitmap = BitmapFactory.decodeByteArray(imageData, 0, imageData.size) ?: return imageData
+            val bitmap =
+                BitmapFactory.decodeByteArray(imageData, 0, imageData.size) ?: return imageData
             val maxDim = maxOf(bitmap.width, bitmap.height)
             val scaledBitmap = if (maxDim > AppConfig.imageMaxSize) {
                 val ratio = AppConfig.imageMaxSize.toFloat() / maxDim.toFloat()
-                Bitmap.createScaledBitmap(
-                    bitmap,
+                bitmap.scale(
                     (bitmap.width * ratio).roundToInt().coerceAtLeast(1),
-                    (bitmap.height * ratio).roundToInt().coerceAtLeast(1),
-                    true
+                    (bitmap.height * ratio).roundToInt().coerceAtLeast(1)
                 )
             } else {
                 bitmap
@@ -422,9 +443,13 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    private fun uploadBytesToS3AndGetPresignedUrl(bytes: ByteArray, key: String, contentType: String): UploadedS3Object {
+    private fun uploadBytesToS3AndGetPresignedUrl(
+        bytes: ByteArray, key: String, contentType: String
+    ): UploadedS3Object {
         putObjectToS3(key, bytes, contentType)
-        return UploadedS3Object(key = key, presignedUrl = createPresignedGetUrl(key, AppConfig.s3PresignedExpiration))
+        return UploadedS3Object(
+            key = key, presignedUrl = createPresignedGetUrl(key, AppConfig.s3PresignedExpiration)
+        )
     }
 
     private fun ensureS3Configured() {
@@ -445,11 +470,9 @@ class ChatViewModel : ViewModel() {
     private fun putObjectToS3(key: String, bytes: ByteArray, contentType: String) {
         val uploadUrl = createPresignedPutUrl(key, AppConfig.s3PresignedExpiration)
 
-        val request = Request.Builder()
-            .url(uploadUrl)
-            .put(bytes.toRequestBody(contentType.toMediaType()))
-            .addHeader("Content-Type", contentType)
-            .build()
+        val request =
+            Request.Builder().url(uploadUrl).put(bytes.toRequestBody(contentType.toMediaType()))
+                .addHeader("Content-Type", contentType).build()
 
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
@@ -483,12 +506,7 @@ class ChatViewModel : ViewModel() {
         }
         val canonicalHeaders = "host:$host\n"
         val canonicalRequest = listOf(
-            "PUT",
-            canonicalUri,
-            canonicalQuery,
-            canonicalHeaders,
-            signedHeaders,
-            "UNSIGNED-PAYLOAD"
+            "PUT", canonicalUri, canonicalQuery, canonicalHeaders, signedHeaders, "UNSIGNED-PAYLOAD"
         ).joinToString("\n")
         val stringToSign = listOf(
             "AWS4-HMAC-SHA256",
@@ -496,7 +514,11 @@ class ChatViewModel : ViewModel() {
             credentialScope,
             sha256Hex(canonicalRequest.toByteArray(StandardCharsets.UTF_8))
         ).joinToString("\n")
-        val signature = hmacSha256Hex(getSignatureKey(AppConfig.s3SecretKey, dateStamp, AppConfig.s3Region, "s3"), stringToSign)
+        val signature = hmacSha256Hex(
+            getSignatureKey(
+                AppConfig.s3SecretKey, dateStamp, AppConfig.s3Region, "s3"
+            ), stringToSign
+        )
         return "$endpoint$canonicalUri?$canonicalQuery&X-Amz-Signature=$signature"
     }
 
@@ -524,12 +546,7 @@ class ChatViewModel : ViewModel() {
         }
         val canonicalHeaders = "host:$host\n"
         val canonicalRequest = listOf(
-            "GET",
-            canonicalUri,
-            canonicalQuery,
-            canonicalHeaders,
-            signedHeaders,
-            "UNSIGNED-PAYLOAD"
+            "GET", canonicalUri, canonicalQuery, canonicalHeaders, signedHeaders, "UNSIGNED-PAYLOAD"
         ).joinToString("\n")
         val stringToSign = listOf(
             "AWS4-HMAC-SHA256",
@@ -537,16 +554,17 @@ class ChatViewModel : ViewModel() {
             credentialScope,
             sha256Hex(canonicalRequest.toByteArray(StandardCharsets.UTF_8))
         ).joinToString("\n")
-        val signature = hmacSha256Hex(getSignatureKey(AppConfig.s3SecretKey, dateStamp, AppConfig.s3Region, "s3"), stringToSign)
+        val signature = hmacSha256Hex(
+            getSignatureKey(
+                AppConfig.s3SecretKey, dateStamp, AppConfig.s3Region, "s3"
+            ), stringToSign
+        )
         return "$endpoint$canonicalUri?$canonicalQuery&X-Amz-Signature=$signature"
     }
 
     private fun deleteObjectFromS3(key: String) {
         val deleteUrl = createPresignedDeleteUrl(key, AppConfig.s3PresignedExpiration)
-        val request = Request.Builder()
-            .url(deleteUrl)
-            .delete()
-            .build()
+        val request = Request.Builder().url(deleteUrl).delete().build()
 
         client.newCall(request).execute().close()
     }
@@ -588,7 +606,11 @@ class ChatViewModel : ViewModel() {
             credentialScope,
             sha256Hex(canonicalRequest.toByteArray(StandardCharsets.UTF_8))
         ).joinToString("\n")
-        val signature = hmacSha256Hex(getSignatureKey(AppConfig.s3SecretKey, dateStamp, AppConfig.s3Region, "s3"), stringToSign)
+        val signature = hmacSha256Hex(
+            getSignatureKey(
+                AppConfig.s3SecretKey, dateStamp, AppConfig.s3Region, "s3"
+            ), stringToSign
+        )
         return "$endpoint$canonicalUri?$canonicalQuery&X-Amz-Signature=$signature"
     }
 
@@ -603,10 +625,8 @@ class ChatViewModel : ViewModel() {
 
     private fun extractTextFromDocx(bytes: ByteArray): String {
         val documentXml = readDocxDocumentXml(bytes) ?: return ""
-        return parseWordDocumentXml(documentXml)
-            .replace(Regex("[ \t\\x0B\u000C\r]+"), " ")
-            .replace(Regex("\n{3,}"), "\n\n")
-            .trim()
+        return parseWordDocumentXml(documentXml).replace(Regex("[ \t\\x0B\u000C\r]+"), " ")
+            .replace(Regex("\n{3,}"), "\n\n").trim()
     }
 
     private fun readDocxDocumentXml(bytes: ByteArray): String? {
@@ -636,6 +656,7 @@ class ChatViewModel : ViewModel() {
                         "w:br", "br" -> result.append('\n')
                     }
                 }
+
                 XmlPullParser.TEXT -> result.append(parser.text)
                 XmlPullParser.END_TAG -> {
                     when (parser.name) {
@@ -653,7 +674,10 @@ class ChatViewModel : ViewModel() {
         return when {
             mimeType?.startsWith("image/") == true -> mimeType
             mimeType == "application/pdf" || lowerName.endsWith(".pdf") -> "application/pdf"
-            mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || lowerName.endsWith(".docx") -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || lowerName.endsWith(
+                ".docx"
+            ) -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
             lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") -> "image/jpeg"
             lowerName.endsWith(".png") -> "image/png"
             lowerName.endsWith(".webp") -> "image/webp"
@@ -668,7 +692,9 @@ class ChatViewModel : ViewModel() {
     }
 
     private fun isDocx(fileName: String, mimeType: String): Boolean {
-        return mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || fileName.lowercase(Locale.US).endsWith(".docx")
+        return mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || fileName.lowercase(
+            Locale.US
+        ).endsWith(".docx")
     }
 
     private fun buildHostHeader(uri: URI): String {
@@ -702,7 +728,9 @@ class ChatViewModel : ViewModel() {
         return hmacSha256(key, data).toHex()
     }
 
-    private fun getSignatureKey(secretKey: String, dateStamp: String, regionName: String, serviceName: String): ByteArray {
+    private fun getSignatureKey(
+        secretKey: String, dateStamp: String, regionName: String, serviceName: String
+    ): ByteArray {
         val kDate = hmacSha256(("AWS4$secretKey").toByteArray(StandardCharsets.UTF_8), dateStamp)
         val kRegion = hmacSha256(kDate, regionName)
         val kService = hmacSha256(kRegion, serviceName)
@@ -716,7 +744,8 @@ class ChatViewModel : ViewModel() {
         for (byte in value.toByteArray(StandardCharsets.UTF_8)) {
             val unsigned = byte.toInt() and 0xff
             val char = unsigned.toChar()
-            val isUnreserved = char in 'A'..'Z' || char in 'a'..'z' || char in '0'..'9' || char == '-' || char == '_' || char == '.' || char == '~'
+            val isUnreserved =
+                char in 'A'..'Z' || char in 'a'..'z' || char in '0'..'9' || char == '-' || char == '_' || char == '.' || char == '~'
             when {
                 isUnreserved -> result.append(char)
                 char == '/' && !encodeSlash -> result.append('/')
@@ -734,12 +763,24 @@ class ChatViewModel : ViewModel() {
 
     private object AppConfig {
         val openRouterApiKey: String by lazy { buildConfigString("OPENROUTER_API_KEY") }
-        val openRouterModel: String by lazy { buildConfigString("OPENROUTER_MODEL", "google/gemini-2.0-flash-001") }
-        val openRouterVisionModel: String by lazy { buildConfigString("OPENROUTER_VISION_MODEL", openRouterModel) }
+        val openRouterModel: String by lazy {
+            buildConfigString(
+                "OPENROUTER_MODEL", "google/gemini-2.0-flash-001"
+            )
+        }
+        val openRouterVisionModel: String by lazy {
+            buildConfigString(
+                "OPENROUTER_VISION_MODEL", openRouterModel
+            )
+        }
 
         val s3Enabled: Boolean by lazy { buildConfigString("S3_ENABLED", "1") == "1" }
         val s3EndpointUrl: String by lazy { buildConfigString("S3_ENDPOINT_URL") }
-        val s3Region: String by lazy { buildConfigString("S3_REGION", "us-east-005").ifBlank { "us-east-005" } }
+        val s3Region: String by lazy {
+            buildConfigString(
+                "S3_REGION", "us-east-005"
+            ).ifBlank { "us-east-005" }
+        }
         val s3AccessKey: String by lazy { buildConfigString("S3_ACCESS_KEY") }
         val s3SecretKey: String by lazy { buildConfigString("S3_SECRET_KEY") }
         val s3Bucket: String by lazy { buildConfigString("S3_BUCKET") }

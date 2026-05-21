@@ -16,8 +16,7 @@ class AuthRepository(private val userDao: UserDao) {
     // Простое хэширование (для учебки; в продакшене используйте BCrypt/Argon2)
     private fun hashPassword(password: String): String {
         return android.util.Base64.encodeToString(
-            java.security.MessageDigest.getInstance("SHA-256")
-                .digest(password.toByteArray()),
+            java.security.MessageDigest.getInstance("SHA-256").digest(password.toByteArray()),
             android.util.Base64.NO_WRAP
         )
     }

@@ -50,15 +50,19 @@ class RegisterActivity : AppCompatActivity() {
             val confirmPassword = etConfirmPassword.text.toString()
 
             when {
-                email.isEmpty() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() -> {
+                email.isEmpty() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email)
+                    .matches() -> {
                     tvError.text = "Введите корректный email"
                 }
+
                 password.length < 6 -> {
                     tvError.text = "Пароль должен содержать минимум 6 символов"
                 }
+
                 password != confirmPassword -> {
                     tvError.text = "Пароли не совпадают"
                 }
+
                 else -> {
                     tvError.text = ""
 
@@ -71,11 +75,14 @@ class RegisterActivity : AppCompatActivity() {
                             val session = SessionManager(this@RegisterActivity)
                             session.saveSession(userId, email)
 
-                            Toast.makeText(this@RegisterActivity, "Регистрация успешна!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                this@RegisterActivity, "Регистрация успешна!", Toast.LENGTH_SHORT
+                            ).show()
 
                             // ✅ 7. Переход с флагами
                             val intent = Intent(this@RegisterActivity, MainActivity::class.java)
-                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            intent.flags =
+                                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                             startActivity(intent)
                             finish()
                         } else {
