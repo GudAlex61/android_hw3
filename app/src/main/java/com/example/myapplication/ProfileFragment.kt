@@ -15,6 +15,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -96,6 +99,7 @@ class ProfileFragment : Fragment() {
 
         bindViews(view)
         setupToolbar()
+        applyWindowInsets(view)
         setupInputFormatters() // ← Маска для даты
         setupClickListeners()
         loadSavedAvatarLocally()
@@ -125,6 +129,15 @@ class ProfileFragment : Fragment() {
     private fun setupToolbar() {
         (requireActivity() as AppCompatActivity).setSupportActionBar(toolbar)
         (requireActivity() as AppCompatActivity).supportActionBar?.setDisplayShowTitleEnabled(false)
+    }
+
+    private fun applyWindowInsets(view: View) {
+        val initialPaddingTop = view.paddingTop
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.updatePadding(top = initialPaddingTop + systemBars.top)
+            insets
+        }
     }
 
     // === Маска ввода даты: ДД.ММ.ГГГГ ===
