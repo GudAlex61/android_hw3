@@ -75,9 +75,7 @@ class ProfileFragment : Fragment() {
     }
 
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View? {
         return inflater.inflate(R.layout.fragment_profile, container, false)
     }
@@ -126,23 +124,22 @@ class ProfileFragment : Fragment() {
 
     private fun setupToolbar() {
         (requireActivity() as AppCompatActivity).setSupportActionBar(toolbar)
-        (requireActivity() as AppCompatActivity).supportActionBar
-            ?.setDisplayShowTitleEnabled(false)
+        (requireActivity() as AppCompatActivity).supportActionBar?.setDisplayShowTitleEnabled(false)
     }
 
     // === Маска ввода даты: ДД.ММ.ГГГГ ===
     private fun setupInputFormatters() {
         birthDateInput.addTextChangedListener(object : TextWatcher {
             private var current = ""
-            private var ddmmyyyy = "ДД.ММ.ГГГГ"
+//            private var ddmmyyyy = "ДД.ММ.ГГГГ"
 
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
 
             override fun afterTextChanged(s: Editable?) {
                 if (s.toString() != current) {
-                    val clean = s.toString().replace("[^\\d]".toRegex(), "")
-                    var cleanC = current.replace("[^\\d]".toRegex(), "")
+                    val clean = s.toString().replace("\\D".toRegex(), "")
+                    var cleanC = current.replace("\\D".toRegex(), "")
 
                     val sel = clean.length
                     for (i in 2..4 step 2) {
@@ -208,8 +205,9 @@ class ProfileFragment : Fragment() {
         }
 
         // Валидация паспорта (если введён) — базовая проверка на длину
-        if (passport.isNotEmpty() && (passport.length < 6 || passport.length > 20)) {
-            Toast.makeText(requireContext(), "Некорректный номер паспорта", Toast.LENGTH_SHORT).show()
+        if (passport.isNotEmpty() && (passport.length !in 6..20)) {
+            Toast.makeText(requireContext(), "Некорректный номер паспорта", Toast.LENGTH_SHORT)
+                .show()
             passportInput.error = "6-20 символов"
             passportInput.requestFocus()
             return
@@ -217,19 +215,18 @@ class ProfileFragment : Fragment() {
 
         viewModel.updateProfile(
             fullName = fullName,
-            birthDate = if (birthDate.isNotEmpty()) birthDate else null,
-            passportNumber = if (passport.isNotEmpty()) passport else null,
+            birthDate = birthDate.ifEmpty { null },
+            passportNumber = passport.ifEmpty { null },
             onSuccess = {
                 Toast.makeText(requireContext(), "Профиль обновлён", Toast.LENGTH_SHORT).show()
-                val imm = requireContext().getSystemService(Activity.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                val imm =
+                    requireContext().getSystemService(Activity.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
                 imm.hideSoftInputFromWindow(requireView().windowToken, 0)
             },
             onError = { error ->
                 Toast.makeText(requireContext(), error, Toast.LENGTH_SHORT).show()
-            }
-        )
+            })
     }
-
 
 
     private fun loadSavedAvatarLocally() {
@@ -299,13 +296,21 @@ class ProfileFragment : Fragment() {
             android.Manifest.permission.READ_EXTERNAL_STORAGE
         }
         when {
-            ContextCompat.checkSelfPermission(requireContext(), permission) == PackageManager.PERMISSION_GRANTED -> {
+            ContextCompat.checkSelfPermission(
+                requireContext(), permission
+            ) == PackageManager.PERMISSION_GRANTED -> {
                 openGallery()
             }
+
             shouldShowRequestPermissionRationale(permission) -> {
-                Toast.makeText(requireContext(), getString(R.string.request_permission_for_photo), Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    requireContext(),
+                    getString(R.string.request_permission_for_photo),
+                    Toast.LENGTH_LONG
+                ).show()
                 requestPermissionLauncher.launch(permission)
             }
+
             else -> {
                 requestPermissionLauncher.launch(permission)
             }
@@ -331,7 +336,9 @@ class ProfileFragment : Fragment() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(requireContext(), getString(R.string.error_loading_photo), Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(), getString(R.string.error_loading_photo), Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }

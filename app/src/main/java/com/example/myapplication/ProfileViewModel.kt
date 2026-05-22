@@ -12,7 +12,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers.IO
 
 // Состояния UI
@@ -55,11 +54,9 @@ class ProfileViewModel(
     // В ProfileViewModel.kt, метод updateProfile:
 
     fun updateProfile(
-        fullName: String,
-        birthDate: String?,          // ← было birthYear: Int?
+        fullName: String, birthDate: String?,          // ← было birthYear: Int?
         passportNumber: String?,     // ← новый параметр
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
+        onSuccess: () -> Unit, onError: (String) -> Unit
     ) {
         viewModelScope.launch {
             val currentEmail = sessionManager.getUserEmail()
@@ -88,7 +85,6 @@ class ProfileViewModel(
         }
     }
 
-    // Методы для аватара (оставляем как было)
     fun saveAvatarFromBitmap(context: Context, bitmap: Bitmap) {
         viewModelScope.launch {
             try {

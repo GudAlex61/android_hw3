@@ -39,13 +39,14 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             chatFragment = ChatFragment()
             supportFragmentManager.beginTransaction()
-                .add(R.id.fragment_container, chatFragment!!, "chat")
-                .commit()
+                .add(R.id.fragment_container, chatFragment!!, "chat").commit()
             bottomNavigationView.selectedItemId = R.id.navigation_chat
         } else {
             chatFragment = supportFragmentManager.findFragmentByTag("chat") as? ChatFragment
-            documentsFragment = supportFragmentManager.findFragmentByTag("documents") as? DocumentsFragment
-            profileFragment = supportFragmentManager.findFragmentByTag("profile") as? ProfileFragment
+            documentsFragment =
+                supportFragmentManager.findFragmentByTag("documents") as? DocumentsFragment
+            profileFragment =
+                supportFragmentManager.findFragmentByTag("profile") as? ProfileFragment
         }
 
         bottomNavigationView.setOnNavigationItemSelectedListener { item ->
@@ -54,14 +55,17 @@ class MainActivity : AppCompatActivity() {
                     showFragment("documents")
                     true
                 }
+
                 R.id.navigation_chat -> {
                     showFragment("chat")
                     true
                 }
+
                 R.id.navigation_profile -> {
                     showFragment("profile")
                     true
                 }
+
                 else -> false
             }
         }

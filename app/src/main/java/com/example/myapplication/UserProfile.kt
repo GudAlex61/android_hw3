@@ -1,4 +1,3 @@
-// File: app/src/main/java/com/example/myapplication/UserProfile.kt
 package com.example.myapplication
 
 data class UserProfile(

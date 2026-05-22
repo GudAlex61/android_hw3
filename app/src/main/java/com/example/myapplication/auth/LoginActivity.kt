@@ -36,7 +36,8 @@ class LoginActivity : AppCompatActivity() {
 
                 if (success) {
                     // 🔐 Получаем пользователя из БД, чтобы взять его ID
-                    val user = repository.getUserByEmail(email) // ← нужно добавить этот метод в AuthRepository
+                    val user =
+                        repository.getUserByEmail(email) // ← нужно добавить этот метод в AuthRepository
 
                     if (user != null) {
                         val session = SessionManager(this@LoginActivity)

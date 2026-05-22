@@ -39,15 +39,11 @@ class DocumentsFragment : Fragment(R.layout.fragment_documents) {
         searchView = view.findViewById(R.id.searchView)
         emptyText = view.findViewById(R.id.tvEmptyDocuments)
 
-        documentsAdapter = DocumentsAdapter(
-            items = emptyList(),
-            onStarClick = { document ->
-                viewModel.toggleFavorite(document)
-            },
-            onDocumentClick = { document ->
-                openDocument(document)
-            }
-        )
+        documentsAdapter = DocumentsAdapter(items = emptyList(), onStarClick = { document ->
+            viewModel.toggleFavorite(document)
+        }, onDocumentClick = { document ->
+            openDocument(document)
+        })
 
         recyclerView.layoutManager = LinearLayoutManager(requireContext())
         recyclerView.adapter = documentsAdapter
@@ -102,8 +98,7 @@ class DocumentsFragment : Fragment(R.layout.fragment_documents) {
                 "Сбросить фильтры"
             )
 
-            AlertDialog.Builder(requireContext())
-                .setTitle("Фильтр и сортировка")
+            AlertDialog.Builder(requireContext()).setTitle("Фильтр и сортировка")
                 .setItems(options) { _, which ->
                     when (which) {
                         // Заголовок "Фильтр по типу документа"
@@ -136,8 +131,7 @@ class DocumentsFragment : Fragment(R.layout.fragment_documents) {
                         // Сброс
                         15 -> viewModel.resetFilters()
                     }
-                }
-                .show()
+                }.show()
         }
     }
 
@@ -182,11 +176,8 @@ class DocumentsFragment : Fragment(R.layout.fragment_documents) {
     }
 
     private fun openDocument(document: Document) {
-        AlertDialog.Builder(requireContext())
-            .setTitle(document.title)
-            .setMessage(document.content)
-            .setPositiveButton("Закрыть", null)
-            .show()
+        AlertDialog.Builder(requireContext()).setTitle(document.title).setMessage(document.content)
+            .setPositiveButton("Закрыть", null).show()
     }
 
     inner class DocumentsAdapter(
@@ -207,8 +198,8 @@ class DocumentsFragment : Fragment(R.layout.fragment_documents) {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_document, parent, false)
+            val view =
+                LayoutInflater.from(parent.context).inflate(R.layout.item_document, parent, false)
 
             return ViewHolder(view)
         }

@@ -27,9 +27,9 @@ data class DocumentsUiState(
                 val query = searchQuery.trim().lowercase()
 
                 result = result.filter { document ->
-                    document.title.lowercase().contains(query) ||
-                            document.type.displayName.lowercase().contains(query) ||
-                            document.content.lowercase().contains(query)
+                    document.title.lowercase()
+                        .contains(query) || document.type.displayName.lowercase()
+                        .contains(query) || document.content.lowercase().contains(query)
                 }
             }
 
@@ -553,8 +553,7 @@ class DocumentsViewModel : ViewModel() {
 
     fun resetFilters() {
         _state.value = _state.value.copy(
-            selectedType = DocumentType.ALL,
-            selectedDateFilter = DateFilter.DEFAULT
+            selectedType = DocumentType.ALL, selectedDateFilter = DateFilter.DEFAULT
         )
     }
 

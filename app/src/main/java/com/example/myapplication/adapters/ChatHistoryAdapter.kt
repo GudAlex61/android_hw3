@@ -13,9 +13,7 @@ import android.widget.ArrayAdapter
 import android.widget.TextView
 
 class ChatHistoryAdapter(
-    context: Context,
-    private val chats: List<Chat>,
-    private val currentChatIndex: Int
+    context: Context, private val chats: List<Chat>, private val currentChatIndex: Int
 ) : ArrayAdapter<Chat>(context, 0, chats) {
 
     override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
@@ -26,17 +24,17 @@ class ChatHistoryAdapter(
 
         val textView = view.findViewById<TextView>(android.R.id.text1)
 
-        val background = GradientDrawable().apply {
-            cornerRadius = dpToPx(12).toFloat()
-            if (position == currentChatIndex) {
-                setColor(Color.parseColor("#FFF9C4"))
-            } else if (chat.isUnread()) {
-                setColor(Color.parseColor("#E8F5E9"))
-            } else {
-                setColor(Color.parseColor("#F3F4F6"))
-            }
-            setStroke(dpToPx(1), Color.parseColor("#E5E7EB"))
-        }
+//        val background = GradientDrawable().apply {
+//            cornerRadius = dpToPx(12).toFloat()
+//            if (position == currentChatIndex) {
+//                setColor(Color.parseColor("#FFF9C4"))
+//            } else if (chat.isUnread()) {
+//                setColor(Color.parseColor("#E8F5E9"))
+//            } else {
+//                setColor(Color.parseColor("#F3F4F6"))
+//            }
+//            setStroke(dpToPx(1), Color.parseColor("#E5E7EB"))
+//        }
 
         textView.apply {
             val title = chat.getTitle()
@@ -73,9 +71,7 @@ class ChatHistoryAdapter(
 
     private fun dpToPx(dp: Int): Int {
         return TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            dp.toFloat(),
-            context.resources.displayMetrics
+            TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), context.resources.displayMetrics
         ).toInt()
     }
 }
