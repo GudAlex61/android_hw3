@@ -100,7 +100,7 @@ class ProfileFragment : Fragment() {
         bindViews(view)
         setupToolbar()
         applyWindowInsets(view)
-        setupInputFormatters() // ← Маска для даты
+        setupInputFormatters()
         setupClickListeners()
         loadSavedAvatarLocally()
         observeUiState()

@@ -10,10 +10,9 @@ class AuthRepository(private val userDao: UserDao) {
         if (userDao.getUserByEmail(email) != null) return -1L
         val hashedPassword = hashPassword(password)
         val user = UserEntity(email = email, password = hashedPassword)
-        return userDao.insert(user)  // ← правильное имя метода
+        return userDao.insert(user)
     }
 
-    // Простое хэширование (для учебки; в продакшене используйте BCrypt/Argon2)
     private fun hashPassword(password: String): String {
         return android.util.Base64.encodeToString(
             java.security.MessageDigest.getInstance("SHA-256").digest(password.toByteArray()),
@@ -22,12 +21,12 @@ class AuthRepository(private val userDao: UserDao) {
     }
 
     suspend fun login(email: String, password: String): Boolean {
-        val hashedPassword = hashPassword(password)  // ← хэшируем!
+        val hashedPassword = hashPassword(password)
         return userDao.login(email, hashedPassword) != null
     }
 
     // AuthRepository.kt
     suspend fun getUserByEmail(email: String): UserEntity? {
-        return userDao.getUserByEmail(email) // ← нужно добавить в UserDao
+        return userDao.getUserByEmail(email)
     }
 }

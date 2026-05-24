@@ -22,13 +22,12 @@ class RegisterActivity : AppCompatActivity() {
     private lateinit var btnRegister: Button
     private lateinit var btnLogin: Button
     private lateinit var tvError: TextView
-    private lateinit var repository: AuthRepository  // ← 5. Объявляем repository
+    private lateinit var repository: AuthRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_register)
 
-        // ✅ Инициализация DAO и Repository (как в LoginActivity)
         val dao = AppDatabase.getDatabase(this).userDao()
         repository = AuthRepository(dao)
 
@@ -66,12 +65,10 @@ class RegisterActivity : AppCompatActivity() {
                 else -> {
                     tvError.text = ""
 
-                    // ✅ 6. Теперь lifecycleScope.launch работает
                     lifecycleScope.launch {
                         val userId = repository.register(email, password)
 
                         if (userId != -1L) {
-                            // Сохраняем сессию
                             val session = SessionManager(this@RegisterActivity)
                             session.saveSession(userId, email)
 
@@ -79,7 +76,6 @@ class RegisterActivity : AppCompatActivity() {
                                 this@RegisterActivity, "Регистрация успешна!", Toast.LENGTH_SHORT
                             ).show()
 
-                            // ✅ 7. Переход с флагами
                             val intent = Intent(this@RegisterActivity, MainActivity::class.java)
                             intent.flags =
                                 Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK

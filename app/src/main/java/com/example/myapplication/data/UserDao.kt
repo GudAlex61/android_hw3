@@ -13,7 +13,7 @@ interface UserDao {
     suspend fun insert(user: UserEntity): Long
 
     @Update
-    suspend fun update(user: UserEntity)  // ← добавлено для обновления профиля
+    suspend fun update(user: UserEntity)
 
     @Query("SELECT * FROM users WHERE email = :email LIMIT 1")
     suspend fun getUserByEmail(email: String): UserEntity?
@@ -22,5 +22,5 @@ interface UserDao {
     suspend fun login(email: String, password: String): UserEntity?
 
     @Query("SELECT * FROM users WHERE id = :userId LIMIT 1")
-    suspend fun getUserById(userId: Long): UserEntity?  // ← для загрузки по ID
+    suspend fun getUserById(userId: Long): UserEntity?
 }
