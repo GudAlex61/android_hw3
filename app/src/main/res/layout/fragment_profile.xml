@@ -45,7 +45,7 @@
         android:scaleType="centerCrop"
         android:clickable="true"
         android:focusable="true"
-        android:background="?attr/selectableItemBackgroundBorderless"
+        android:foreground="@drawable/ripple_circle"
         app:shapeAppearanceOverlay="@style/CircleImage"/>
 
     <!-- Email (только просмотр) -->
