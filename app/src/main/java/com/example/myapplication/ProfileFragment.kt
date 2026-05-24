@@ -154,6 +154,34 @@ class ProfileFragment : Fragment() {
                     val clean = s.toString().replace("\\D".toRegex(), "")
                     val length = clean.length
 
+                    // --- Strict Validation ---
+                    var isValid = true
+                    if (clean.isNotEmpty()) {
+                        // Day validation
+                        if (clean[0] > '3') isValid = false
+                        if (length >= 2) {
+                            val day = clean.substring(0, 2).toInt()
+                            if (day < 1 || day > 31) isValid = false
+                        }
+                        // Month validation
+                        if (length >= 3 && clean[2] > '1') isValid = false
+                        if (length >= 4) {
+                            val month = clean.substring(2, 4).toInt()
+                            if (month < 1 || month > 12) isValid = false
+                        }
+                        // Year validation (basic start check)
+                        if (length >= 5 && clean[4] !in '1'..'2') isValid = false
+                    }
+
+                    if (!isValid) {
+                        birthDateInput.removeTextChangedListener(this)
+                        birthDateInput.setText(current)
+                        birthDateInput.setSelection(current.length)
+                        birthDateInput.addTextChangedListener(this)
+                        return
+                    }
+                    // -------------------------
+
                     var formatted = ""
                     if (length > 0) {
                         formatted = clean.substring(0, minOf(length, 2))
