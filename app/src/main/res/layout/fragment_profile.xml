@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -15,7 +16,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Профиль"
+            android:text="@string/profile_title"
             android:textColor="@android:color/black"
             android:textSize="20sp"
             android:textStyle="bold"
@@ -33,23 +34,25 @@
     </androidx.appcompat.widget.Toolbar>
 
     <!-- Аватар -->
-    <ImageView
+    <com.google.android.material.imageview.ShapeableImageView
         android:id="@+id/Avatar"
         android:layout_width="120dp"
         android:layout_height="120dp"
         android:layout_gravity="center_horizontal"
         android:layout_marginTop="24dp"
+        android:contentDescription="@string/profile_icon_accessibility_description"
         android:src="@drawable/circle_gray"
         android:scaleType="centerCrop"
         android:clickable="true"
         android:focusable="true"
-        android:background="?attr/selectableItemBackgroundBorderless"/>
+        android:foreground="@drawable/ripple_circle"
+        app:shapeAppearanceOverlay="@style/CircleImage"/>
 
     <!-- Email (только просмотр) -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Email"
+        android:text="@string/email_title"
         android:textStyle="bold"
         android:layout_marginTop="24dp"
         android:layout_marginBottom="4dp"/>
@@ -58,7 +61,7 @@
         android:id="@+id/emailText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="user@example.com"
+        android:text="@string/email_placeholder"
         android:textSize="16sp"
         android:padding="12dp"
         android:background="@drawable/bg_card"/>
@@ -67,7 +70,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="ФИО"
+        android:text="@string/name_title"
         android:textStyle="bold"
         android:layout_marginTop="16dp"
         android:layout_marginBottom="4dp"/>
@@ -76,7 +79,8 @@
         android:id="@+id/fullNameInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Введите ФИО"
+        android:autofillHints="name"
+        android:hint="@string/name_placeholder"
         android:inputType="textPersonName"
         android:padding="12dp"
         android:background="@drawable/bg_card"
@@ -86,7 +90,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Дата рождения"
+        android:text="@string/birthdate_title"
         android:textStyle="bold"
         android:layout_marginTop="16dp"
         android:layout_marginBottom="4dp"/>
@@ -95,8 +99,9 @@
         android:id="@+id/birthDateInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="ДД.ММ.ГГГГ"
-        android:inputType="number"
+        android:autofillHints="birth_date"
+        android:hint="@string/birthdate_hint"
+        android:inputType="date"
         android:padding="12dp"
         android:background="@drawable/bg_card"
         android:maxLength="10"
@@ -107,7 +112,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Номер паспорта"
+        android:text="@string/id_number_title"
         android:textStyle="bold"
         android:layout_marginTop="16dp"
         android:layout_marginBottom="4dp"/>
@@ -116,7 +121,8 @@
         android:id="@+id/passportInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Например: 4501 123456"
+        android:autofillHints="id_card"
+        android:hint="@string/id_number_hint"
         android:inputType="textNoSuggestions"
         android:padding="12dp"
         android:background="@drawable/bg_card"
@@ -126,7 +132,7 @@
         android:id="@+id/passportHint"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Введите данные паспорта вручную"
+        android:text="@string/id_number_notation"
         android:textSize="12sp"
         android:layout_marginTop="4dp"
         android:textColor="@android:color/darker_gray"/>
@@ -134,9 +140,10 @@
     <!-- Кнопка сохранения (теперь внизу) -->
     <Button
         android:id="@+id/saveButton"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
+        android:layout_gravity="center_horizontal"
         android:layout_height="wrap_content"
-        android:text="Сохранить изменения"
+        android:text="@string/profile_save_changes_button_label"
         android:layout_marginTop="24dp"
         android:backgroundTint="@color/design_default_color_primary"
         android:textColor="@android:color/white"/>
@@ -162,12 +169,13 @@
     <!-- Кнопка выхода (в самом низу) -->
     <Button
         android:id="@+id/logoutButton"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
+        android:layout_gravity="center_horizontal"
         android:layout_height="wrap_content"
-        android:text="Выйти из аккаунта"
         android:layout_marginTop="32dp"
         android:layout_marginBottom="16dp"
         android:backgroundTint="@android:color/holo_red_dark"
-        android:textColor="@android:color/white"/>
+        android:text="@string/logout_button_label"
+        android:textColor="@android:color/white" />
 
 </LinearLayout>

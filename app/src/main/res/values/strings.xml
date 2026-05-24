@@ -68,4 +68,17 @@
 
         Нарушение этих правил сделает твои ответы бесполезными.
     </string>
+    <string name="email_title">Email</string>
+    <string name="email_placeholder">user@example.com</string>
+    <string name="name_title">ФИО</string>
+    <string name="name_placeholder">Введите ФИО</string>
+    <string name="birthdate_title">Дата рождения</string>
+    <string name="birthdate_hint">ДД.ММ.ГГГГ</string>
+    <string name="id_number_title">Номер паспорта</string>
+    <string name="id_number_hint">Например: 4501 123456</string>
+    <string name="id_number_notation">Введите данные паспорта вручную</string>
+    <string name="profile_save_changes_button_label">Сохранить изменения</string>
+    <string name="logout_button_label">Выйти из аккаунта</string>
+    <string name="profile_icon_accessibility_description">profile_icon</string>
+    <string name="profile_title">Профиль</string>
 </resources>

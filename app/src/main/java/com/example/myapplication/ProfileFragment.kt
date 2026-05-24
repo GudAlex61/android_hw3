@@ -152,19 +152,52 @@ class ProfileFragment : Fragment() {
             override fun afterTextChanged(s: Editable?) {
                 if (s.toString() != current) {
                     val clean = s.toString().replace("\\D".toRegex(), "")
-                    var cleanC = current.replace("\\D".toRegex(), "")
+                    val length = clean.length
 
-                    val sel = clean.length
-                    for (i in 2..4 step 2) {
-                        if (sel > i && cleanC.length < i) cleanC += "."
+                    // --- Strict Validation ---
+                    var isValid = true
+                    if (clean.isNotEmpty()) {
+                        // Day validation
+                        if (clean[0] > '3') isValid = false
+                        if (length >= 2) {
+                            val day = clean.substring(0, 2).toInt()
+                            if (day !in 1..31) isValid = false
+                        }
+                        // Month validation
+                        if (length >= 3 && clean[2] > '1') isValid = false
+                        if (length >= 4) {
+                            val month = clean.substring(2, 4).toInt()
+                            if (month !in 1..12) isValid = false
+                        }
+                        // Year validation (basic start check)
+                        if (length >= 5 && clean[4] !in '1'..'2') isValid = false
                     }
-                    if (clean != cleanC) {
+
+                    if (!isValid) {
                         birthDateInput.removeTextChangedListener(this)
-                        birthDateInput.setText(cleanC)
-                        birthDateInput.setSelection(cleanC.length)
+                        birthDateInput.setText(current)
+                        birthDateInput.setSelection(current.length)
                         birthDateInput.addTextChangedListener(this)
-                        current = cleanC
+                        return
                     }
+                    // -------------------------
+
+                    var formatted = ""
+                    if (length > 0) {
+                        formatted = clean.substring(0, minOf(length, 2))
+                        if (length > 2) {
+                            formatted += "." + clean.substring(2, minOf(length, 4))
+                            if (length > 4) {
+                                formatted += "." + clean.substring(4, minOf(length, 8))
+                            }
+                        }
+                    }
+
+                    current = formatted
+                    birthDateInput.removeTextChangedListener(this)
+                    birthDateInput.setText(formatted)
+                    birthDateInput.setSelection(formatted.length)
+                    birthDateInput.addTextChangedListener(this)
                 }
             }
         })
