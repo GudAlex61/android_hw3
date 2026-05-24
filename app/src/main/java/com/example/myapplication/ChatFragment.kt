@@ -25,6 +25,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import java.io.ByteArrayOutputStream
@@ -60,9 +63,10 @@ class ChatFragment : Fragment() {
     private var pendingAttachment: PendingAttachment? = null
     private var pendingDocx: PendingDocx? = null
 
-    private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { handleSelectedFile(it) }
-    }
+    private val filePickerLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let { handleSelectedFile(it) }
+        }
 
     private val createDocxLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument(DOCX_MIME)
@@ -75,9 +79,7 @@ class ChatFragment : Fragment() {
     }
 
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View? {
         return inflater.inflate(R.layout.fragment_chat, container, false)
     }
@@ -88,11 +90,21 @@ class ChatFragment : Fragment() {
         bindViews(view)
         initMessagesContainer()
         setupAttachmentPreviewStyle()
+        applyWindowInsets(view)
         setupMessageInput()
         setupClickListeners()
         setupHistoryMenu()
         observeViewModel()
         updateUIForCurrentChat()
+    }
+
+    private fun applyWindowInsets(view: View) {
+        val initialPaddingTop = view.paddingTop
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.updatePadding(top = initialPaddingTop + systemBars.top)
+            insets
+        }
     }
 
     private fun bindViews(view: View) {
@@ -137,8 +149,7 @@ class ChatFragment : Fragment() {
         viewModel.docxExportRequest.observe(viewLifecycleOwner) { request ->
             if (request != null) {
                 startDocxSave(
-                    fileName = request.fileName,
-                    content = request.content
+                    fileName = request.fileName, content = request.content
                 )
                 viewModel.consumeDocxExportRequest()
             }
@@ -150,8 +161,7 @@ class ChatFragment : Fragment() {
 
         scrollView = ScrollView(requireContext()).apply {
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
             )
             isFillViewport = false
             isVerticalScrollBarEnabled = true
@@ -161,8 +171,7 @@ class ChatFragment : Fragment() {
         messagesContainer = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             )
             setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
         }
@@ -182,14 +191,14 @@ class ChatFragment : Fragment() {
         messageInput.isVerticalScrollBarEnabled = true
         messageInput.overScrollMode = View.OVER_SCROLL_NEVER
         messageInput.setRawInputType(
-            InputType.TYPE_CLASS_TEXT or
-                    InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                    InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
         )
         messageInput.imeOptions = EditorInfo.IME_ACTION_SEND or EditorInfo.IME_FLAG_NO_EXTRACT_UI
 
         messageInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) =
+                Unit
+
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
 
             override fun afterTextChanged(s: Editable?) {
@@ -206,10 +215,14 @@ class ChatFragment : Fragment() {
         newChatButton.setOnClickListener {
             clearPendingAttachment()
             if (viewModel.getCurrentChat().messages.isEmpty()) {
-                Toast.makeText(requireContext(), R.string.error_current_chat_empty, Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(), R.string.error_current_chat_empty, Toast.LENGTH_SHORT
+                ).show()
             } else {
                 viewModel.createNewChat()
-                Toast.makeText(requireContext(), R.string.toast_new_chat_created, Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(), R.string.toast_new_chat_created, Toast.LENGTH_SHORT
+                ).show()
             }
         }
 
@@ -219,9 +232,7 @@ class ChatFragment : Fragment() {
         attachButton.setOnClickListener {
             filePickerLauncher.launch(
                 arrayOf(
-                    "image/*",
-                    "application/pdf",
-                    DOCX_MIME
+                    "image/*", "application/pdf", DOCX_MIME
                 )
             )
         }
@@ -302,7 +313,9 @@ class ChatFragment : Fragment() {
         val mimeType = requireContext().contentResolver.getType(uri) ?: guessMimeType(fileName)
 
         if (!isSupportedFile(fileName, mimeType)) {
-            Toast.makeText(requireContext(), "Поддерживаются только фото, PDF и DOCX", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                requireContext(), "Поддерживаются только фото, PDF и DOCX", Toast.LENGTH_LONG
+            ).show()
             return
         }
 
@@ -313,7 +326,9 @@ class ChatFragment : Fragment() {
         }
 
         if (bytes.size > MAX_FILE_SIZE_BYTES) {
-            Toast.makeText(requireContext(), "Файл слишком большой. Максимум 20 МБ", Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                requireContext(), "Файл слишком большой. Максимум 20 МБ", Toast.LENGTH_LONG
+            ).show()
             return
         }
 
@@ -366,8 +381,7 @@ class ChatFragment : Fragment() {
         val messageLayout = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 topMargin = dpToPx(8)
                 bottomMargin = dpToPx(8)
@@ -410,8 +424,7 @@ class ChatFragment : Fragment() {
         val textContainer = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
             )
         }
 
@@ -432,8 +445,7 @@ class ChatFragment : Fragment() {
                 textSize = 24f
                 setPadding(0, dpToPx(4), dpToPx(8), 0)
                 layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
                 )
             }
             messageLayout.addView(botIcon)
@@ -468,7 +480,8 @@ class ChatFragment : Fragment() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dpToPx(10), dpToPx(8), dpToPx(10), dpToPx(8))
-            background = roundedBackground(if (isUser) 0x22FFFFFF else 0xFFFFFFFF.toInt(), dpToPx(14))
+            background =
+                roundedBackground(if (isUser) 0x22FFFFFF else 0xFFFFFFFF.toInt(), dpToPx(14))
         }
 
         val icon = TextView(requireContext()).apply {
@@ -485,10 +498,11 @@ class ChatFragment : Fragment() {
             setTextColor(if (isUser) 0xFFFFFFFF.toInt() else 0xFF111827.toInt())
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.MIDDLE
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                weight = 1f
-                leftMargin = dpToPx(8)
-            }
+            layoutParams =
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    weight = 1f
+                    leftMargin = dpToPx(8)
+                }
         }
 
         chip.addView(icon)
@@ -504,8 +518,7 @@ class ChatFragment : Fragment() {
             setPadding(dpToPx(12), dpToPx(10), dpToPx(12), dpToPx(10))
             background = roundedBackground(0xFFFFFFFF.toInt(), dpToPx(14))
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 topMargin = dpToPx(10)
             }
@@ -530,10 +543,11 @@ class ChatFragment : Fragment() {
             setTextColor(0xFF111827.toInt())
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.MIDDLE
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                weight = 1f
-                leftMargin = dpToPx(8)
-            }
+            layoutParams =
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    weight = 1f
+                    leftMargin = dpToPx(8)
+                }
         }
 
         row.addView(icon)
@@ -554,8 +568,7 @@ class ChatFragment : Fragment() {
             setPadding(dpToPx(12), dpToPx(9), dpToPx(12), dpToPx(9))
             background = roundedBackground(0xFFF59E0B.toInt(), dpToPx(14))
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
                 topMargin = dpToPx(10)
             }
@@ -589,11 +602,8 @@ class ChatFragment : Fragment() {
 
     private fun makeDocxFileName(title: String): String {
         val safeTitle = title.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
-            .replace(Regex("[^A-Za-zА-Яа-я0-9 _.-]"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-            .take(36)
-            .ifBlank { "document" }
+            .replace(Regex("[^A-Za-zА-Яа-я0-9 _.-]"), " ").replace(Regex("\\s+"), " ").trim()
+            .take(36).ifBlank { "document" }
         val date = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
         return "${safeTitle}_$date.docx"
     }
@@ -609,7 +619,10 @@ class ChatFragment : Fragment() {
     private fun iconForMime(fileName: String, mimeType: String?): String {
         val lower = fileName.lowercase(Locale.US)
         return when {
-            mimeType?.startsWith("image/") == true || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".webp") -> "🖼️"
+            mimeType?.startsWith("image/") == true || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(
+                ".png"
+            ) || lower.endsWith(".webp") -> "🖼️"
+
             mimeType == "application/pdf" || lower.endsWith(".pdf") -> "📕"
             mimeType == DOCX_MIME || lower.endsWith(".docx") -> "📄"
             else -> "📎"
@@ -631,9 +644,9 @@ class ChatFragment : Fragment() {
 
     private fun isSupportedFile(fileName: String, mimeType: String): Boolean {
         val lower = fileName.lowercase(Locale.US)
-        return mimeType.startsWith("image/") ||
-                mimeType == "application/pdf" || lower.endsWith(".pdf") ||
-                mimeType == DOCX_MIME || lower.endsWith(".docx")
+        return mimeType.startsWith("image/") || mimeType == "application/pdf" || lower.endsWith(".pdf") || mimeType == DOCX_MIME || lower.endsWith(
+            ".docx"
+        )
     }
 
     private fun clearChatUI() {
@@ -650,9 +663,7 @@ class ChatFragment : Fragment() {
 
     private fun dpToPx(dp: Int): Int {
         return TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            dp.toFloat(),
-            resources.displayMetrics
+            TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), resources.displayMetrics
         ).toInt()
     }
 
@@ -668,7 +679,8 @@ class ChatFragment : Fragment() {
                 } else {
                     minOf(originalSize, maxWidthPx)
                 }
-                val constrainedSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.AT_MOST)
+                val constrainedSpec =
+                    View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.AT_MOST)
                 super.onMeasure(constrainedSpec, heightMeasureSpec)
             } else {
                 super.onMeasure(widthMeasureSpec, heightMeasureSpec)
@@ -677,18 +689,16 @@ class ChatFragment : Fragment() {
     }
 
     private data class PendingAttachment(
-        val name: String,
-        val mimeType: String,
-        val bytes: ByteArray
+        val name: String, val mimeType: String, val bytes: ByteArray
     )
 
     private data class PendingDocx(
-        val fileName: String,
-        val bytes: ByteArray
+        val fileName: String, val bytes: ByteArray
     )
 
     companion object {
         private const val MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
-        private const val DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        private const val DOCX_MIME =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     }
 }
