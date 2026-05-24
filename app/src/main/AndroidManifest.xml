@@ -27,7 +27,8 @@
         <!-- MainActivity - обычный экран, без LAUNCHER -->
         <activity
             android:name=".MainActivity"
-            android:exported="true" />
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
 
         <activity
             android:name=".SettingsActivity"
