@@ -152,19 +152,24 @@ class ProfileFragment : Fragment() {
             override fun afterTextChanged(s: Editable?) {
                 if (s.toString() != current) {
                     val clean = s.toString().replace("\\D".toRegex(), "")
-                    var cleanC = current.replace("\\D".toRegex(), "")
+                    val length = clean.length
 
-                    val sel = clean.length
-                    for (i in 2..4 step 2) {
-                        if (sel > i && cleanC.length < i) cleanC += "."
+                    var formatted = ""
+                    if (length > 0) {
+                        formatted = clean.substring(0, minOf(length, 2))
+                        if (length > 2) {
+                            formatted += "." + clean.substring(2, minOf(length, 4))
+                            if (length > 4) {
+                                formatted += "." + clean.substring(4, minOf(length, 8))
+                            }
+                        }
                     }
-                    if (clean != cleanC) {
-                        birthDateInput.removeTextChangedListener(this)
-                        birthDateInput.setText(cleanC)
-                        birthDateInput.setSelection(cleanC.length)
-                        birthDateInput.addTextChangedListener(this)
-                        current = cleanC
-                    }
+
+                    current = formatted
+                    birthDateInput.removeTextChangedListener(this)
+                    birthDateInput.setText(formatted)
+                    birthDateInput.setSelection(formatted.length)
+                    birthDateInput.addTextChangedListener(this)
                 }
             }
         })
