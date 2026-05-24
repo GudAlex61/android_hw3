@@ -14,9 +14,20 @@ class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
     private lateinit var repository: AuthRepository
+    private lateinit var sessionManager: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        sessionManager = SessionManager(this)
+
+        if (sessionManager.isLoggedIn()) {
+            val intent = Intent(this, MainActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            startActivity(intent)
+            finish()
+            return
+        }
 
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -32,19 +43,16 @@ class LoginActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 val success = repository.login(email, password)
 
-                // В LoginActivity.kt, внутри lifecycleScope.launch после успешного login:
 
                 if (success) {
-                    // 🔐 Получаем пользователя из БД, чтобы взять его ID
                     val user =
-                        repository.getUserByEmail(email) // ← нужно добавить этот метод в AuthRepository
+                        repository.getUserByEmail(email)
 
                     if (user != null) {
                         val session = SessionManager(this@LoginActivity)
                         session.saveSession(user.id, user.email)
                     }
 
-                    // Переход с очисткой стека
                     val intent = Intent(this@LoginActivity, MainActivity::class.java)
                     intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                     startActivity(intent)
