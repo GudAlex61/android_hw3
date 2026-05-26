@@ -1,12 +1,15 @@
 package com.example.myapplication
 
 import android.app.AlertDialog
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -29,6 +32,19 @@ class DocumentsFragment : Fragment(R.layout.fragment_documents) {
     private val viewModel: DocumentsViewModel by viewModels()
 
     private lateinit var documentsAdapter: DocumentsAdapter
+
+    private var pendingDocumentToSave: Document? = null
+
+    private val createDocumentLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument(DOCX_MIME_TYPE)
+    ) { uri: Uri? ->
+        val document = pendingDocumentToSave
+        pendingDocumentToSave = null
+
+        if (uri == null || document == null) return@registerForActivityResult
+
+        saveDocumentToUri(document, uri)
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -176,8 +192,56 @@ class DocumentsFragment : Fragment(R.layout.fragment_documents) {
     }
 
     private fun openDocument(document: Document) {
-        AlertDialog.Builder(requireContext()).setTitle(document.title).setMessage(document.content)
-            .setPositiveButton("Закрыть", null).show()
+        AlertDialog.Builder(requireContext())
+            .setTitle(document.title)
+            .setMessage(document.content)
+            .setPositiveButton("Сохранить") { _, _ ->
+                startSavingDocument(document)
+            }
+            .setNegativeButton("Закрыть", null)
+            .show()
+    }
+
+    private fun startSavingDocument(document: Document) {
+        pendingDocumentToSave = document
+        createDocumentLauncher.launch(buildDocxFileName(document.title))
+    }
+
+    private fun saveDocumentToUri(document: Document, uri: Uri) {
+        runCatching {
+            val docxBytes = DocxBuilder.createSimpleDocx(
+                title = document.title,
+                text = document.content
+            )
+
+            requireContext().contentResolver.openOutputStream(uri)?.use { output ->
+                output.write(docxBytes)
+                output.flush()
+            } ?: error("Не удалось открыть файл для записи")
+        }.onSuccess {
+            Toast.makeText(requireContext(), "Документ сохранён", Toast.LENGTH_SHORT).show()
+        }.onFailure { error ->
+            Toast.makeText(
+                requireContext(),
+                "Не удалось сохранить документ: ${error.message ?: "неизвестная ошибка"}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun buildDocxFileName(title: String): String {
+        val safeTitle = title
+            .trim()
+            .replace(Regex("""[\\/:*?"<>|]"""), "_")
+            .replace(Regex("""\s+"""), " ")
+            .take(80)
+            .ifBlank { "document" }
+
+        return if (safeTitle.endsWith(".docx", ignoreCase = true)) {
+            safeTitle
+        } else {
+            "$safeTitle.docx"
+        }
     }
 
     inner class DocumentsAdapter(
@@ -236,5 +300,9 @@ class DocumentsFragment : Fragment(R.layout.fragment_documents) {
         }
 
         override fun getItemCount(): Int = items.size
+    }
+
+    private companion object {
+        const val DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     }
 }
