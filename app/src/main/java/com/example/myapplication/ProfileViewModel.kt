@@ -51,8 +51,6 @@ class ProfileViewModel(
         }
     }
 
-    // В ProfileViewModel.kt, метод updateProfile:
-
     fun updateProfile(
         fullName: String, birthDate: String?,          // ← было birthYear: Int?
         passportNumber: String?,     // ← новый параметр
@@ -89,15 +87,17 @@ class ProfileViewModel(
         viewModelScope.launch {
             try {
                 val file = withContext(IO) {
-                    val avatarDir = File(context.filesDir, "avatars")
+                    val userId = sessionManager.getUserId() ?: return@withContext null
+
+                    val avatarDir = File(context.filesDir, "avatars/$userId")
                     if (!avatarDir.exists()) avatarDir.mkdirs()
-                    val file = File(avatarDir, "avatar_${System.currentTimeMillis()}.png")
+
+                    val file = File(avatarDir, "avatar.png")
                     FileOutputStream(file).use { out ->
                         bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
                     }
                     file
                 }
-                // Здесь можно сохранить путь в профиль, если нужно
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -106,10 +106,13 @@ class ProfileViewModel(
 
     fun loadSavedAvatar(context: Context): Bitmap? {
         return try {
-            val avatarDir = File(context.filesDir, "avatars")
-            val files = avatarDir.listFiles()?.filter { it.name.endsWith(".png") }
-            if (!files.isNullOrEmpty()) {
-                android.graphics.BitmapFactory.decodeFile(files.maxByOrNull { it.lastModified() }?.absolutePath)
+            val userId = sessionManager.getUserId() ?: return null
+
+            val avatarDir = File(context.filesDir, "avatars/$userId")
+            val file = File(avatarDir, "avatar.png")
+
+            if (file.exists()) {
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath)
             } else null
         } catch (e: Exception) {
             e.printStackTrace()

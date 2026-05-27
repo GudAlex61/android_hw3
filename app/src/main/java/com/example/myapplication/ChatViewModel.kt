@@ -2,6 +2,7 @@ package com.example.myapplication
 
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
@@ -32,7 +33,11 @@ import java.util.zip.ZipInputStream
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app: Application = getApplication()
-    private val prefs = app.getSharedPreferences(CHAT_PREFS_NAME, Context.MODE_PRIVATE)
+    private fun getUserChatPrefs(): SharedPreferences {
+        val userId = sessionManager.getUserId()
+        val prefsName = userId?.let { "chat_local_storage_user_$it" } ?: "chat_local_storage"
+        return app.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+    }
     private val sessionManager = SessionManager(app)
 
     private val _chatHistory = MutableLiveData<MutableList<Chat>>(mutableListOf(Chat()))
@@ -653,7 +658,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadChatsFromStorage(): MutableList<Chat> {
-        val rawJson = prefs.getString(KEY_CHATS_JSON, null) ?: return mutableListOf(Chat())
+        val rawJson = getUserChatPrefs().getString(KEY_CHATS_JSON, null) ?: return mutableListOf(Chat())
         return runCatching {
             val array = JSONArray(rawJson)
             val chats = mutableListOf<Chat>()
@@ -689,14 +694,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadCurrentChatIndex(chatCount: Int): Int {
-        val savedIndex = prefs.getInt(KEY_CURRENT_CHAT_INDEX, 0)
+        val savedIndex = getUserChatPrefs().getInt(KEY_CURRENT_CHAT_INDEX, 0)
         return savedIndex.coerceIn(0, (chatCount - 1).coerceAtLeast(0))
     }
 
     private fun persistChats() {
         val chats = _chatHistory.value ?: mutableListOf(Chat())
         val currentIndex = (_currentChatIndex.value ?: 0).coerceIn(0, (chats.size - 1).coerceAtLeast(0))
-        prefs.edit()
+        getUserChatPrefs().edit()
             .putString(KEY_CHATS_JSON, chatsToJson(chats).toString())
             .putInt(KEY_CURRENT_CHAT_INDEX, currentIndex)
             .apply()

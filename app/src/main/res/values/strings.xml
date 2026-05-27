@@ -12,8 +12,7 @@
     <string name="passport_label">Паспорт: %s</string>
     <string name="avatar_description">Аватар пользователя</string>
     <string name="action_settings">Настройки</string>
-    <string name="user_full_name_template">Короленко Михаил Сергеевич</string>
-    <string name="user_birthday_template">04.08.1998</string>
+
     <string name="settings">Настройки</string>
     <string name="error_loading_photo">Ошибка загрузки изображения</string>
     <string name="request_permission_for_photo">Разрешение необходимо для выбора фото из галереи</string>
@@ -68,17 +67,42 @@
 
         Нарушение этих правил сделает твои ответы бесполезными.
     </string>
-    <string name="email_title">Email</string>
-    <string name="email_placeholder">user@example.com</string>
-    <string name="name_title">ФИО</string>
-    <string name="name_placeholder">Введите ФИО</string>
-    <string name="birthdate_title">Дата рождения</string>
-    <string name="birthdate_hint">ДД.ММ.ГГГГ</string>
-    <string name="id_number_title">Номер паспорта</string>
-    <string name="id_number_hint">Например: 4501 123456</string>
-    <string name="id_number_notation">Введите данные паспорта вручную</string>
+
+    <string name="login_error_invalid_credentials">Неверный логин или пароль</string>
+
+    <string name="register_error_invalid_email">Введите корректный email</string>
+    <string name="register_error_password_length">Пароль должен содержать минимум 6 символов</string>
+    <string name="register_error_password_mismatch">Пароли не совпадают</string>
+    <string name="register_success_message">Регистрация успешна!</string>
+    <string name="register_error_email_exists">Пользователь с таким email уже существует</string>
+
     <string name="profile_save_changes_button_label">Сохранить изменения</string>
-    <string name="logout_button_label">Выйти из аккаунта</string>
     <string name="profile_icon_accessibility_description">profile_icon</string>
     <string name="profile_title">Профиль</string>
+    <string name="profile_error_empty_fullname">Введите ФИО</string>
+    <string name="profile_hint_required_field">Обязательное поле</string>
+    <string name="profile_error_invalid_date_format">Формат: ДД.ММ.ГГГГ</string>
+    <string name="profile_hint_date_example">Пример: 15.05.1995</string>
+    <string name="profile_error_invalid_passport">Некорректный номер паспорта</string>
+    <string name="profile_hint_passport_length">6-20 символов</string>
+    <string name="profile_success_updated">Профиль обновлён</string>
+    <string name="profile_email_title">Email</string>
+    <string name="profile_email_placeholder">user@example.com</string>
+    <string name="profile_name_title">ФИО</string>
+    <string name="profile_name_placeholder">Введите ФИО</string>
+    <string name="profile_birthdate_title">Дата рождения</string>
+    <string name="profile_birthdate_hint">ДД.ММ.ГГГГ</string>
+    <string name="profile_passport_title">Номер паспорта</string>
+    <string name="profile_passport_hint">Например: 4501 123456</string>
+    <string name="profile_passport_notation">Введите данные паспорта вручную</string>
+    <string name="profile_logout_button_label">Выйти из аккаунта</string>
+
+    <string name="login_label_email">Введите почту:</string>
+    <string name="login_label_password">Введите пароль (6 символов минимум):</string>
+    <string name="button_welcome">Войти</string>
+    <string name="button_register">Зарегистрироваться</string>
+
+    <string name="register_password">Пароль</string>
+    <string name="register_confirm_password">Подтвердите пароль</string>
+    <string name="register_having_account">Уже есть аккаунт? Войти</string>
 </resources>

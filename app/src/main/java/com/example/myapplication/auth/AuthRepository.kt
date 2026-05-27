@@ -25,7 +25,6 @@ class AuthRepository(private val userDao: UserDao) {
         return userDao.login(email, hashedPassword) != null
     }
 
-    // AuthRepository.kt
     suspend fun getUserByEmail(email: String): UserEntity? {
         return userDao.getUserByEmail(email)
     }

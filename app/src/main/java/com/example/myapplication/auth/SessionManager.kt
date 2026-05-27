@@ -2,6 +2,7 @@
 package com.example.myapplication.auth
 
 import android.content.Context
+import java.io.File
 import android.content.SharedPreferences
 
 class SessionManager(context: Context) {
@@ -20,9 +21,10 @@ class SessionManager(context: Context) {
             .putBoolean(KEY_IS_LOGGED_IN, true).apply()
     }
 
-//    fun getUserId(): Long? =
-//        if (prefs.getBoolean(KEY_IS_LOGGED_IN, false)) prefs.getLong(KEY_USER_ID, -1)
-//            .takeIf { it != -1L } else null
+    fun getUserId(): Long? =
+        if (prefs.getBoolean(KEY_IS_LOGGED_IN, false)) {
+            prefs.getLong(KEY_USER_ID, -1).takeIf { it != -1L }
+        } else null
 
     fun getUserEmail(): String? = if (prefs.getBoolean(KEY_IS_LOGGED_IN, false)) prefs.getString(
         KEY_USER_EMAIL, null

@@ -51,15 +51,15 @@ class RegisterActivity : AppCompatActivity() {
             when {
                 email.isEmpty() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email)
                     .matches() -> {
-                    tvError.text = "Введите корректный email"
+                    tvError.text = getString(R.string.register_error_invalid_email)
                 }
 
                 password.length < 6 -> {
-                    tvError.text = "Пароль должен содержать минимум 6 символов"
+                    tvError.text = getString(R.string.register_error_password_length)
                 }
 
                 password != confirmPassword -> {
-                    tvError.text = "Пароли не совпадают"
+                    tvError.text = getString(R.string.register_error_password_mismatch)
                 }
 
                 else -> {
@@ -73,7 +73,7 @@ class RegisterActivity : AppCompatActivity() {
                             session.saveSession(userId, email)
 
                             Toast.makeText(
-                                this@RegisterActivity, "Регистрация успешна!", Toast.LENGTH_SHORT
+                                this@RegisterActivity, getString(R.string.register_success_message), Toast.LENGTH_SHORT
                             ).show()
 
                             val intent = Intent(this@RegisterActivity, MainActivity::class.java)
@@ -82,7 +82,7 @@ class RegisterActivity : AppCompatActivity() {
                             startActivity(intent)
                             finish()
                         } else {
-                            tvError.text = "Пользователь с таким email уже существует"
+                            tvError.text = getString(R.string.register_error_email_exists)
                         }
                     }
                 }
