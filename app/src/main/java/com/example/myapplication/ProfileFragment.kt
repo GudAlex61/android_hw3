@@ -1,3 +1,4 @@
+// \app\src\main\java\com\example\myapplication\ProfileFragment.kt
 package com.example.myapplication
 
 import android.app.Activity
@@ -32,16 +33,13 @@ import com.example.myapplication.auth.LoginActivity
 
 class ProfileFragment : Fragment() {
 
-    // === UI Элементы ===
     private lateinit var avatar: ImageView
     private lateinit var progressBar: ProgressBar
     private lateinit var errorText: TextView
     private lateinit var passportInput: EditText
-    private lateinit var passportHint: TextView
     private lateinit var toolbar: Toolbar
     private lateinit var settingsButton: ImageButton
 
-    // Поля профиля
     private lateinit var emailText: TextView
     private lateinit var fullNameInput: EditText
     private lateinit var birthDateInput: EditText
@@ -51,10 +49,8 @@ class ProfileFragment : Fragment() {
     private lateinit var viewModel: ProfileViewModel
     private lateinit var sessionManager: SessionManager
 
-    // Валидация даты
     private val datePattern = Pattern.compile("^\\d{2}\\.\\d{2}\\.\\d{4}$")
 
-    // === Launchers ===
     private val galleryLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -86,7 +82,6 @@ class ProfileFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // ✅ Инициализация зависимостей
         sessionManager = SessionManager(requireContext())
         val dao = AppDatabase.getDatabase(requireContext()).userDao()
         val repository = ProfileRepository(dao)
@@ -108,17 +103,14 @@ class ProfileFragment : Fragment() {
         viewModel.loadProfile()
     }
 
-    // === Привязка View ===
     private fun bindViews(view: View) {
         avatar = view.findViewById(R.id.Avatar)
         progressBar = view.findViewById(R.id.progressBar)
         errorText = view.findViewById(R.id.errorText)
         passportInput = view.findViewById(R.id.passportInput)
-        passportHint = view.findViewById(R.id.passportHint)
         toolbar = view.findViewById(R.id.toolbar)
         settingsButton = view.findViewById(R.id.settingsButton)
 
-        // Поля профиля
         emailText = view.findViewById(R.id.emailText)
         fullNameInput = view.findViewById(R.id.fullNameInput)
         birthDateInput = view.findViewById(R.id.birthDateInput)
@@ -140,11 +132,9 @@ class ProfileFragment : Fragment() {
         }
     }
 
-    // === Маска ввода даты: ДД.ММ.ГГГГ ===
     private fun setupInputFormatters() {
         birthDateInput.addTextChangedListener(object : TextWatcher {
             private var current = ""
-//            private var ddmmyyyy = "ДД.ММ.ГГГГ"
 
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -154,22 +144,18 @@ class ProfileFragment : Fragment() {
                     val clean = s.toString().replace("\\D".toRegex(), "")
                     val length = clean.length
 
-                    // --- Strict Validation ---
                     var isValid = true
                     if (clean.isNotEmpty()) {
-                        // Day validation
                         if (clean[0] > '3') isValid = false
                         if (length >= 2) {
                             val day = clean.substring(0, 2).toInt()
                             if (day !in 1..31) isValid = false
                         }
-                        // Month validation
                         if (length >= 3 && clean[2] > '1') isValid = false
                         if (length >= 4) {
                             val month = clean.substring(2, 4).toInt()
                             if (month !in 1..12) isValid = false
                         }
-                        // Year validation (basic start check)
                         if (length >= 5 && clean[4] !in '1'..'2') isValid = false
                     }
 
@@ -180,7 +166,6 @@ class ProfileFragment : Fragment() {
                         birthDateInput.addTextChangedListener(this)
                         return
                     }
-                    // -------------------------
 
                     var formatted = ""
                     if (length > 0) {
@@ -203,7 +188,6 @@ class ProfileFragment : Fragment() {
         })
     }
 
-    // === Обработчики ===
     private fun setupClickListeners() {
         settingsButton.setOnClickListener {
             startActivity(Intent(requireContext(), SettingsActivity::class.java))
@@ -228,7 +212,6 @@ class ProfileFragment : Fragment() {
         }
     }
 
-    // === Валидация и сохранение ===
     private fun saveProfileChanges() {
         val fullName = fullNameInput.text.toString().trim()
         val birthDate = birthDateInput.text.toString().trim()
@@ -236,25 +219,23 @@ class ProfileFragment : Fragment() {
 
         // Валидация ФИО
         if (fullName.isEmpty()) {
-            Toast.makeText(requireContext(), "Введите ФИО", Toast.LENGTH_SHORT).show()
-            fullNameInput.error = "Обязательное поле"
+            Toast.makeText(requireContext(), getString(R.string.profile_error_empty_fullname), Toast.LENGTH_SHORT).show()
+            fullNameInput.error = getString(R.string.profile_hint_required_field)
             fullNameInput.requestFocus()
             return
         }
 
-        // Валидация даты (если введена)
         if (birthDate.isNotEmpty() && !datePattern.matcher(birthDate).matches()) {
-            Toast.makeText(requireContext(), "Формат: ДД.ММ.ГГГГ", Toast.LENGTH_SHORT).show()
-            birthDateInput.error = "Пример: 15.05.1995"
+            Toast.makeText(requireContext(), getString(R.string.profile_error_invalid_date_format), Toast.LENGTH_SHORT).show()
+            birthDateInput.error = getString(R.string.profile_hint_date_example)
             birthDateInput.requestFocus()
             return
         }
 
-        // Валидация паспорта (если введён) — базовая проверка на длину
         if (passport.isNotEmpty() && (passport.length !in 6..20)) {
-            Toast.makeText(requireContext(), "Некорректный номер паспорта", Toast.LENGTH_SHORT)
+            Toast.makeText(requireContext(), getString(R.string.profile_error_invalid_passport), Toast.LENGTH_SHORT)
                 .show()
-            passportInput.error = "6-20 символов"
+            passportInput.error = getString(R.string.profile_hint_passport_length)
             passportInput.requestFocus()
             return
         }
@@ -264,7 +245,7 @@ class ProfileFragment : Fragment() {
             birthDate = birthDate.ifEmpty { null },
             passportNumber = passport.ifEmpty { null },
             onSuccess = {
-                Toast.makeText(requireContext(), "Профиль обновлён", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), getString(R.string.profile_success_updated), Toast.LENGTH_SHORT).show()
                 val imm =
                     requireContext().getSystemService(Activity.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
                 imm.hideSoftInputFromWindow(requireView().windowToken, 0)
@@ -284,7 +265,6 @@ class ProfileFragment : Fragment() {
         }
     }
 
-    // === Наблюдение за состоянием ===
     private fun observeUiState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -318,7 +298,6 @@ class ProfileFragment : Fragment() {
         fullNameInput.visibility = visibility
         birthDateInput.visibility = visibility
         passportInput.visibility = visibility
-        passportHint.visibility = visibility
         saveButton.visibility = visibility
     }
 
@@ -327,14 +306,12 @@ class ProfileFragment : Fragment() {
         errorText.visibility = View.GONE
         toggleContentVisibility(View.VISIBLE)
 
-        // Заполнение полей
         emailText.text = profile.email
         fullNameInput.setText(profile.fullName)
         birthDateInput.setText(profile.birthDate ?: "")
         passportInput.setText(profile.passportNumber ?: "")
     }
 
-    // === Галерея (без изменений) ===
     private fun checkPermissionAndOpenGallery() {
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             android.Manifest.permission.READ_MEDIA_IMAGES

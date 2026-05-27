@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.myapplication.MainActivity
+import com.example.myapplication.R
 import com.example.myapplication.data.AppDatabase
 import com.example.myapplication.databinding.ActivityLoginBinding
 import kotlinx.coroutines.launch
@@ -58,7 +59,7 @@ class LoginActivity : AppCompatActivity() {
                     startActivity(intent)
                     finish()
                 } else {
-                    binding.tvError.text = "Неверный логин или пароль"
+                    binding.tvError.text = getString(R.string.login_error_invalid_credentials)
                 }
             }
         }

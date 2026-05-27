@@ -11,7 +11,7 @@
         android:id="@+id/etEmail"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Email"
+        android:hint="@string/profile_email_title"
         android:inputType="textEmailAddress"
         android:importantForAutofill="yes" />
 
@@ -19,7 +19,7 @@
         android:id="@+id/etPassword"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Пароль"
+        android:hint="@string/register_password"
         android:inputType="textPassword"
         android:layout_marginTop="12dp"
         android:importantForAutofill="yes" />
@@ -28,7 +28,7 @@
         android:id="@+id/etConfirmPassword"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Подтвердите пароль"
+        android:hint="@string/register_confirm_password"
         android:inputType="textPassword"
         android:layout_marginTop="12dp"
         android:importantForAutofill="yes" />
@@ -37,15 +37,19 @@
         android:id="@+id/btnRegister"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Зарегистрироваться"
+        android:text="@string/button_register"
+        android:background="@drawable/btn_rounded"
+        android:backgroundTint="@color/yellow_500"
         android:layout_marginTop="20dp"/>
 
     <Button
         android:id="@+id/btnLogin"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Уже есть аккаунт? Войти"
+        android:text="@string/register_having_account"
         style="?android:attr/borderlessButtonStyle"
+        android:background="@drawable/btn_rounded"
+        android:backgroundTint="@android:color/transparent"
         android:textColor="@android:color/darker_gray"
         android:layout_marginTop="8dp"/>
 
