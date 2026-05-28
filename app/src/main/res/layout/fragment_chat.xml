@@ -144,11 +144,10 @@
                     android:textSize="18sp" />
             </LinearLayout>
 
-            <LinearLayout
+            <androidx.constraintlayout.widget.ConstraintLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="bottom|center_vertical"
-                android:orientation="horizontal">
+                android:minHeight="40dp">
 
                 <TextView
                     android:id="@+id/attachButton"
@@ -158,7 +157,21 @@
                     android:gravity="center"
                     android:text="+"
                     android:textColor="#9CA3AF"
-                    android:textSize="22sp" />
+                    android:textSize="22sp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent" />
+
+                <TextView
+                    android:id="@+id/sendButton"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/rounded_yellow_button"
+                    android:gravity="center"
+                    android:text="↑"
+                    android:textColor="#FFFFFF"
+                    android:textSize="20sp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent" />
 
                 <EditText
                     android:id="@+id/messageInput"
@@ -166,7 +179,6 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:layout_marginEnd="8dp"
-                    android:layout_weight="1"
                     android:background="@drawable/bg_search"
                     android:gravity="top|start"
                     android:hint="Написать сообщение..."
@@ -176,27 +188,22 @@
                     android:maxLines="5"
                     android:minHeight="40dp"
                     android:minLines="1"
-                    android:overScrollMode="never"
+                    android:overScrollMode="ifContentScrolls"
                     android:paddingStart="14dp"
                     android:paddingTop="9dp"
                     android:paddingEnd="14dp"
                     android:paddingBottom="9dp"
                     android:scrollbars="vertical"
+                    android:textAlignment="viewStart"
                     android:textColor="#000000"
                     android:textColorHint="#777777"
-                    android:textSize="16sp" />
+                    android:textSize="16sp"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@id/sendButton"
+                    app:layout_constraintStart_toEndOf="@id/attachButton"
+                    app:layout_constraintTop_toTopOf="parent" />
 
-                <TextView
-                    android:id="@+id/sendButton"
-                    android:layout_marginTop="5dp"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="@drawable/rounded_yellow_button"
-                    android:gravity="center"
-                    android:text="↑"
-                    android:textColor="#FFFFFF"
-                    android:textSize="20sp" />
-            </LinearLayout>
+            </androidx.constraintlayout.widget.ConstraintLayout>
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
