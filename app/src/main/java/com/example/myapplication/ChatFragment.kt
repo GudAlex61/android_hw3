@@ -140,8 +140,8 @@ class ChatFragment : Fragment() {
         }
 
         viewModel.isLoading.observe(viewLifecycleOwner) { loading ->
-            sendButton.text = if (loading) "⌛" else "↑"
             sendButton.isEnabled = !loading
+            sendButton.alpha = if (loading) 0.55f else 1f
             attachButton.isEnabled = !loading
             attachButton.alpha = if (loading) 0.5f else 1f
         }

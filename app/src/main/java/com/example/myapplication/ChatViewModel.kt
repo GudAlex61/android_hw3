@@ -2,7 +2,6 @@ package com.example.myapplication
 
 import android.app.Application
 import android.content.Context
-import android.content.SharedPreferences
 import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
@@ -33,11 +32,7 @@ import java.util.zip.ZipInputStream
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app: Application = getApplication()
-    private fun getUserChatPrefs(): SharedPreferences {
-        val userId = sessionManager.getUserId()
-        val prefsName = userId?.let { "chat_local_storage_user_$it" } ?: "chat_local_storage"
-        return app.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-    }
+    private val prefs = app.getSharedPreferences(CHAT_PREFS_NAME, Context.MODE_PRIVATE)
     private val sessionManager = SessionManager(app)
 
     private val _chatHistory = MutableLiveData<MutableList<Chat>>(mutableListOf(Chat()))
@@ -178,41 +173,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun getAIResponseWithFile(fileName: String, mimeType: String, bytes: ByteArray, userPrompt: String) {
         _isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
-            val shouldCreateDocx = isDocumentGenerationRequest(userPrompt)
             try {
-                val prompt = if (shouldCreateDocx) {
-                    buildDocumentGenerationPromptForFile(fileName, mimeType, userPrompt)
-                } else {
-                    buildFilePrompt(fileName, mimeType, userPrompt)
-                }
-                val maxTokens = if (shouldCreateDocx) 3200 else 1800
+                val prompt = buildFilePrompt(fileName, mimeType, userPrompt)
                 val payload = when {
-                    isPdf(fileName, mimeType) -> buildPdfPayload(fileName, bytes, prompt, maxTokens)
-                    isDocx(fileName, mimeType) -> buildDocxPayload(fileName, bytes, prompt, maxTokens)
-                    isImageMime(mimeType) -> buildImagePayload(fileName, mimeType, bytes, prompt, maxTokens)
+                    isPdf(fileName, mimeType) -> buildPdfPayload(fileName, bytes, prompt)
+                    isDocx(fileName, mimeType) -> buildDocxPayload(fileName, bytes, prompt)
+                    isImageMime(mimeType) -> buildImagePayload(fileName, mimeType, bytes, prompt)
                     else -> throw IllegalArgumentException("Поддерживаются только изображения, PDF и DOCX")
                 }
 
                 val aiResponse = executeOpenRouterRequestWithRetry(payload)
 
                 withContext(Dispatchers.Main) {
-                    if (shouldCreateDocx) {
-                        val fileNameForSave = makeDocumentFileName(userPrompt.ifBlank { fileName }, aiResponse)
-                        val documentMessage = Message(
-                            text = "Документ готов: $fileNameForSave\nНажмите «Скачать DOCX», чтобы сохранить его на устройство.",
-                            isUser = false,
-                            generatedDocxFileName = fileNameForSave,
-                            generatedDocxContent = aiResponse
-                        )
-                        addMessage(documentMessage)
-                        _docxExportRequest.value = DocxExportRequest(
-                            messageId = documentMessage.id,
-                            fileName = fileNameForSave,
-                            content = aiResponse
-                        )
-                    } else {
-                        addMessage(Message(text = aiResponse, isUser = false))
-                    }
+                    addMessage(Message(text = aiResponse, isUser = false))
                     _isLoading.value = false
                 }
             } catch (e: Exception) {
@@ -249,48 +222,48 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return JSONObject().apply {
             put("model", AppConfig.openRouterModel)
             put("max_tokens", maxTokens)
-            put("messages", buildMessagesArray(userMessage))
+            put("messages", JSONArray().apply {
+                put(systemMessageJson())
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", userMessage)
+                })
+            })
         }
     }
 
-    private suspend fun buildPdfPayload(
-        fileName: String,
-        bytes: ByteArray,
-        prompt: String,
-        maxTokens: Int = 1800
-    ): JSONObject {
+    private suspend fun buildPdfPayload(fileName: String, bytes: ByteArray, prompt: String): JSONObject {
         val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
         val dataUrl = "data:application/pdf;base64,$base64"
 
-        val currentContent = JSONArray().apply {
-            put(JSONObject().apply {
-                put("type", "text")
-                put("text", prompt.ifBlank {
-                    "Проанализируй PDF-документ. Извлеки ключевые факты, юридически значимые условия, риски и краткий вывод."
-                })
-            })
-            put(JSONObject().apply {
-                put("type", "file")
-                put("file", JSONObject().apply {
-                    put("filename", fileName)
-                    put("file_data", dataUrl)
-                })
-            })
-        }
-
         return JSONObject().apply {
             put("model", AppConfig.openRouterModel)
-            put("max_tokens", maxTokens)
-            put("messages", buildMessagesArray(currentContent))
+            put("max_tokens", 1800)
+            put("messages", JSONArray().apply {
+                put(systemMessageJson())
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("type", "text")
+                            put("text", prompt.ifBlank {
+                                "Проанализируй PDF-документ. Извлеки ключевые факты, юридически значимые условия, риски и краткий вывод."
+                            })
+                        })
+                        put(JSONObject().apply {
+                            put("type", "file")
+                            put("file", JSONObject().apply {
+                                put("filename", fileName)
+                                put("file_data", dataUrl)
+                            })
+                        })
+                    })
+                })
+            })
         }
     }
 
-    private suspend fun buildDocxPayload(
-        fileName: String,
-        bytes: ByteArray,
-        prompt: String,
-        maxTokens: Int = 1800
-    ): JSONObject {
+    private suspend fun buildDocxPayload(fileName: String, bytes: ByteArray, prompt: String): JSONObject {
         val documentText = extractTextFromDocx(bytes)
             .take(MAX_DOCX_CHARS)
             .ifBlank { throw IllegalArgumentException("Не удалось извлечь текст из DOCX") }
@@ -303,91 +276,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             append(documentText)
         }
 
-        return buildTextPayload(userContent, maxTokens = maxTokens)
+        return buildTextPayload(userContent, maxTokens = 1800)
     }
 
-    private suspend fun buildImagePayload(
-        fileName: String,
-        mimeType: String,
-        bytes: ByteArray,
-        prompt: String,
-        maxTokens: Int = 1400
-    ): JSONObject {
-        val safeMimeType = normalizeImageMimeType(fileName, mimeType)
+    private suspend fun buildImagePayload(fileName: String, mimeType: String, bytes: ByteArray, prompt: String): JSONObject {
         val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-        val dataUrl = "data:$safeMimeType;base64,$base64"
-
-        val currentContent = JSONArray().apply {
-            put(JSONObject().apply {
-                put("type", "text")
-                put("text", prompt.ifBlank { "Опиши изображение и извлеки весь видимый текст." })
-            })
-            put(JSONObject().apply {
-                put("type", "image_url")
-                put("image_url", JSONObject().apply {
-                    put("url", dataUrl)
-                })
-            })
-        }
+        val dataUrl = "data:$mimeType;base64,$base64"
 
         return JSONObject().apply {
             put("model", AppConfig.openRouterVisionModel)
-            put("max_tokens", maxTokens)
-            put("messages", buildMessagesArray(currentContent))
-        }
-    }
-
-    private suspend fun buildMessagesArray(currentUserContent: Any): JSONArray {
-        return JSONArray().apply {
-            put(systemMessageJson())
-            getPreviousDialogContext().forEach { contextMessage ->
+            put("max_tokens", 1400)
+            put("messages", JSONArray().apply {
+                put(systemMessageJson())
                 put(JSONObject().apply {
-                    put("role", if (contextMessage.isUser) "user" else "assistant")
-                    put("content", contextMessage.toContextText())
+                    put("role", "user")
+                    put("content", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("type", "text")
+                            put("text", prompt.ifBlank { "Опиши изображение и извлеки весь видимый текст." })
+                        })
+                        put(JSONObject().apply {
+                            put("type", "image_url")
+                            put("image_url", JSONObject().apply {
+                                put("url", dataUrl)
+                            })
+                        })
+                    })
                 })
-            }
-            put(JSONObject().apply {
-                put("role", "user")
-                put("content", currentUserContent)
             })
         }
-    }
-
-    private fun getPreviousDialogContext(): List<Message> {
-        val messages = getCurrentChat().messages.toList()
-        val historyBeforeCurrent = if (messages.lastOrNull()?.isUser == true) {
-            messages.dropLast(1)
-        } else {
-            messages
-        }
-        if (historyBeforeCurrent.isEmpty()) return emptyList()
-
-        val lastAssistantIndex = historyBeforeCurrent.indexOfLast { !it.isUser }
-        if (lastAssistantIndex == -1) {
-            return historyBeforeCurrent.lastOrNull { it.isUser }?.let { listOf(it) } ?: emptyList()
-        }
-
-        val lastUserIndex = historyBeforeCurrent
-            .subList(0, lastAssistantIndex)
-            .indexOfLast { it.isUser }
-
-        val result = mutableListOf<Message>()
-        if (lastUserIndex != -1) result.add(historyBeforeCurrent[lastUserIndex])
-        result.add(historyBeforeCurrent[lastAssistantIndex])
-        return result
-    }
-
-    private fun Message.toContextText(): String {
-        return buildString {
-            if (text.isNotBlank()) append(text.take(MAX_CONTEXT_MESSAGE_CHARS))
-            if (!attachmentName.isNullOrBlank()) {
-                if (isNotEmpty()) appendLine()
-                append("[Прикреплённый файл: $attachmentName")
-                if (!attachmentMimeType.isNullOrBlank()) append(", тип: $attachmentMimeType")
-                append("]")
-            }
-            if (isBlank()) append(if (isUser) "[Сообщение пользователя без текста]" else "[Ответ ассистента без текста]")
-        }.trim()
     }
 
     private suspend fun systemMessageJson(): JSONObject {
@@ -489,23 +406,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             appendLine("Верни только содержимое документа. Не добавляй приветствие, пояснение, фразу «я подготовил», Markdown, HTML или блоки кода.")
             appendLine("Первая строка должна быть названием документа.")
             appendLine("Если не хватает данных, используй аккуратные поля-заглушки в квадратных скобках, например [Адрес квартиры], [ФИО наймодателя].")
-            appendLine("Используй данные профиля пользователя из системного промпта, если они подходят для стороны документа.")
-        }.trim()
-    }
-
-    private fun buildDocumentGenerationPromptForFile(fileName: String, mimeType: String, userMessage: String): String {
-        val baseRequest = userMessage.trim().ifBlank {
-            "Подготовь юридический документ на основе приложенного файла."
-        }
-        return buildString {
-            appendLine(baseRequest)
-            appendLine()
-            appendLine("Приложенный файл: $fileName")
-            appendLine("Тип файла: $mimeType")
-            appendLine("Сгенерируй полный текст документа для последующего сохранения в DOCX, учитывая содержимое приложенного файла.")
-            appendLine("Верни только содержимое документа. Не добавляй приветствие, пояснение, Markdown, HTML или блоки кода.")
-            appendLine("Первая строка должна быть названием документа.")
-            appendLine("Если не хватает данных, используй аккуратные поля-заглушки в квадратных скобках.")
             appendLine("Используй данные профиля пользователя из системного промпта, если они подходят для стороны документа.")
         }.trim()
     }
@@ -634,19 +534,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun normalizeImageMimeType(fileName: String, mimeType: String): String {
-        val lowerName = fileName.lowercase(Locale.US)
-        return when {
-            mimeType == "image/jpg" -> "image/jpeg"
-            mimeType.startsWith("image/") -> mimeType
-            lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") -> "image/jpeg"
-            lowerName.endsWith(".png") -> "image/png"
-            lowerName.endsWith(".webp") -> "image/webp"
-            lowerName.endsWith(".gif") -> "image/gif"
-            else -> mimeType
-        }
-    }
-
     private fun isImageMime(mimeType: String): Boolean = mimeType.startsWith("image/")
 
     private fun isPdf(fileName: String, mimeType: String): Boolean {
@@ -658,7 +545,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadChatsFromStorage(): MutableList<Chat> {
-        val rawJson = getUserChatPrefs().getString(KEY_CHATS_JSON, null) ?: return mutableListOf(Chat())
+        val rawJson = prefs.getString(KEY_CHATS_JSON, null) ?: return mutableListOf(Chat())
         return runCatching {
             val array = JSONArray(rawJson)
             val chats = mutableListOf<Chat>()
@@ -694,14 +581,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadCurrentChatIndex(chatCount: Int): Int {
-        val savedIndex = getUserChatPrefs().getInt(KEY_CURRENT_CHAT_INDEX, 0)
+        val savedIndex = prefs.getInt(KEY_CURRENT_CHAT_INDEX, 0)
         return savedIndex.coerceIn(0, (chatCount - 1).coerceAtLeast(0))
     }
 
     private fun persistChats() {
         val chats = _chatHistory.value ?: mutableListOf(Chat())
         val currentIndex = (_currentChatIndex.value ?: 0).coerceIn(0, (chats.size - 1).coerceAtLeast(0))
-        getUserChatPrefs().edit()
+        prefs.edit()
             .putString(KEY_CHATS_JSON, chatsToJson(chats).toString())
             .putInt(KEY_CURRENT_CHAT_INDEX, currentIndex)
             .apply()
@@ -777,7 +664,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_CHATS_JSON = "chats_json"
         private const val KEY_CURRENT_CHAT_INDEX = "current_chat_index"
         private const val MAX_DOCX_CHARS = 60_000
-        private const val MAX_CONTEXT_MESSAGE_CHARS = 4_000
         private const val DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     }
 }

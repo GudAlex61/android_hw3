@@ -23,7 +23,6 @@
             </intent-filter>
         </activity>
 
-        <!-- MainActivity - обычный экран, без LAUNCHER -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
