@@ -7,18 +7,23 @@ pluginManagement {
                 includeGroupByRegex("androidx.*")
             }
         }
-        mavenCentral()
+        mavenCentral() // ← Обязательно для KSP
         gradlePluginPortal()
     }
+    plugins {
+        // ИСПРАВЛЕННАЯ ВЕРСИЯ:
+        id("com.google.devtools.ksp") version "2.3.2"
+    }
+}
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         google()
-        mavenCentral()
+        mavenCentral() // ← Убедитесь, что есть и здесь
     }
 }
-
 rootProject.name = "My Application"
 include(":app")
- 

@@ -1,8 +1,108 @@
 <resources>
-    <string name="app_name">My Application</string>
+    <string name="app_name">AI Lawyer</string>
     <string name="hint_send_message">Отправить сообщение</string>
     <string name="help_message">Чем могу помочь вам сегодня?</string>
     <string name="hi_message">Привет, я AI Lawyer.</string>
     <string name="error_network">Ошибка сети. Проверьте подключение.</string>
     <string name="error_api">Ошибка API. Попробуйте позже.</string>
+    <string name="birth_date_label">Дата рождения: %s</string>
+    <string name="not_entered">не введен</string>
+    <string name="error_load">Не удалось загрузить данные</string>
+    <string name="auto_fill_hint">*Эти данные будут автоматически подставляться в Ваши документы</string>
+    <string name="passport_label">Паспорт: %s</string>
+    <string name="avatar_description">Аватар пользователя</string>
+    <string name="action_settings">Настройки</string>
+
+    <string name="settings">Настройки</string>
+    <string name="error_loading_photo">Ошибка загрузки изображения</string>
+    <string name="request_permission_for_photo">Разрешение необходимо для выбора фото из галереи</string>
+
+    <string name="setting_language">Язык общения</string>
+    <string name="setting_consultation_type">Тип консультаций</string>
+    <string name="setting_notifications">Уведомления</string>
+    <string name="setting_theme">Тема оформления</string>
+    <string name="setting_account">Акаунт</string>
+    <string name="setting_about">О приложении</string>
+
+    <string name="language_russian">Русский</string>
+    <string name="consultation_civil_law">Гражданское право</string>
+    <string name="notifications_enabled">Включены</string>
+    <string name="theme_light">Светлая</string>
+    <string name="email">mikhail@example.com</string>
+    <string name="version">Версия 1.2.0</string>
+
+    <string name="empty_chat_title">Новый чат</string>
+    <string name="empty_chat_preview">Пустой чат</string>
+    <string name="attach_function_toast">Функция прикрепления файлов</string>
+    <string name="error_current_chat_empty">Текущий чат уже пуст</string>
+    <string name="toast_new_chat_created">Новый чат создан</string>
+    <string name="toast_chat_cleared">Чат очищен</string>
+    <string name="error_no_ai_response">Не удалось получить ответ</string>
+    <string name="error_parsing_response">Ошибка обработки ответа</string>
+    <string name="error_api_code">Ошибка API: %1$d</string>
+    <string name="error_connection">Ошибка соединения</string>
+    <string name="ai_bot_emoji">🤖</string>
+    <string name="ai_system_prompt">
+        Ты юридический консультант в чате Android-приложения.
+
+        КРИТИЧЕСКИ ВАЖНО: Приложение отображает только ЧИСТЫЙ ТЕКСТ.
+        Любые элементы форматирования сломают отображение!
+
+        ЖЁСТКИЕ ПРАВИЛА:
+        1. НИКАКОЙ РАЗМЕТКИ — ни Markdown, ни HTML
+        2. НИКАКИХ СТРОК КОДА, ТАБЛИЦ
+        3. Списки делай только через цифры с точкой (1. 2. 3.)
+        4. Не используй **жирный**, *курсив*, `код`, ## заголовки
+        5. Даже не пытайся \"украсить\" ответ — это сломает приложение
+
+        Примеры ЗАПРЕЩЁННОГО форматирования:
+        **Это жирный текст** — ПЛОХО
+        *Это курсив* — ПЛОХО
+        # Заголовок — ПЛОХО
+
+        Примеры РАЗРЕШЁННОГО форматирования:
+        Это обычный текст. — ХОРОШО
+        1. Первый пункт. — ХОРОШО
+        2. Второй пункт. — ХОРОШО
+
+        Нарушение этих правил сделает твои ответы бесполезными.
+    </string>
+
+    <string name="login_error_invalid_credentials">Неверный логин или пароль</string>
+
+    <string name="register_error_invalid_email">Введите корректный email</string>
+    <string name="register_error_password_length">Пароль должен содержать минимум 6 символов</string>
+    <string name="register_error_password_mismatch">Пароли не совпадают</string>
+    <string name="register_success_message">Регистрация успешна!</string>
+    <string name="register_error_email_exists">Пользователь с таким email уже существует</string>
+
+    <string name="profile_save_changes_button_label">Сохранить изменения</string>
+    <string name="profile_icon_accessibility_description">profile_icon</string>
+    <string name="profile_title">Профиль</string>
+    <string name="profile_error_empty_fullname">Введите ФИО</string>
+    <string name="profile_hint_required_field">Обязательное поле</string>
+    <string name="profile_error_invalid_date_format">Формат: ДД.ММ.ГГГГ</string>
+    <string name="profile_hint_date_example">Пример: 15.05.1995</string>
+    <string name="profile_error_invalid_passport">Некорректный номер паспорта</string>
+    <string name="profile_hint_passport_length">6-20 символов</string>
+    <string name="profile_success_updated">Профиль обновлён</string>
+    <string name="profile_email_title">Email</string>
+    <string name="profile_email_placeholder">user@example.com</string>
+    <string name="profile_name_title">ФИО</string>
+    <string name="profile_name_placeholder">Введите ФИО</string>
+    <string name="profile_birthdate_title">Дата рождения</string>
+    <string name="profile_birthdate_hint">ДД.ММ.ГГГГ</string>
+    <string name="profile_passport_title">Номер паспорта</string>
+    <string name="profile_passport_hint">Например: 4501 123456</string>
+    <string name="profile_passport_notation">Введите данные паспорта вручную</string>
+    <string name="profile_logout_button_label">Выйти из аккаунта</string>
+
+    <string name="login_label_email">Введите почту:</string>
+    <string name="login_label_password">Введите пароль (6 символов минимум):</string>
+    <string name="button_welcome">Войти</string>
+    <string name="button_register">Зарегистрироваться</string>
+
+    <string name="register_password">Пароль</string>
+    <string name="register_confirm_password">Подтвердите пароль</string>
+    <string name="register_having_account">Уже есть аккаунт? Войти</string>
 </resources>

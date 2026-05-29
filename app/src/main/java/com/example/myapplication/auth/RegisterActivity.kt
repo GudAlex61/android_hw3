@@ -1,0 +1,92 @@
+// // RegisterActivity
+package com.example.myapplication.auth
+
+import android.content.Intent
+import android.os.Bundle
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope  // ← 1. Импортируем lifecycleScope
+import com.example.myapplication.MainActivity  // ← 2. Импортируем MainActivity
+import com.example.myapplication.R
+import com.example.myapplication.data.AppDatabase  // ← 3. Для инициализации DAO
+import kotlinx.coroutines.launch  // ← 4. Импортируем launch
+
+class RegisterActivity : AppCompatActivity() {
+
+    private lateinit var etEmail: EditText
+    private lateinit var etPassword: EditText
+    private lateinit var etConfirmPassword: EditText
+    private lateinit var btnRegister: Button
+    private lateinit var btnLogin: Button
+    private lateinit var tvError: TextView
+    private lateinit var repository: AuthRepository
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_register)
+
+        val dao = AppDatabase.getDatabase(this).userDao()
+        repository = AuthRepository(dao)
+
+        etEmail = findViewById(R.id.etEmail)
+        etPassword = findViewById(R.id.etPassword)
+        etConfirmPassword = findViewById(R.id.etConfirmPassword)
+        btnRegister = findViewById(R.id.btnRegister)
+        btnLogin = findViewById(R.id.btnLogin)
+        tvError = findViewById(R.id.tvError)
+
+        btnLogin.setOnClickListener {
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+        }
+
+        btnRegister.setOnClickListener {
+            val email = etEmail.text.toString().trim()
+            val password = etPassword.text.toString()
+            val confirmPassword = etConfirmPassword.text.toString()
+
+            when {
+                email.isEmpty() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email)
+                    .matches() -> {
+                    tvError.text = getString(R.string.register_error_invalid_email)
+                }
+
+                password.length < 6 -> {
+                    tvError.text = getString(R.string.register_error_password_length)
+                }
+
+                password != confirmPassword -> {
+                    tvError.text = getString(R.string.register_error_password_mismatch)
+                }
+
+                else -> {
+                    tvError.text = ""
+
+                    lifecycleScope.launch {
+                        val userId = repository.register(email, password)
+
+                        if (userId != -1L) {
+                            val session = SessionManager(this@RegisterActivity)
+                            session.saveSession(userId, email)
+
+                            Toast.makeText(
+                                this@RegisterActivity, getString(R.string.register_success_message), Toast.LENGTH_SHORT
+                            ).show()
+
+                            val intent = Intent(this@RegisterActivity, MainActivity::class.java)
+                            intent.flags =
+                                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            startActivity(intent)
+                            finish()
+                        } else {
+                            tvError.text = getString(R.string.register_error_email_exists)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

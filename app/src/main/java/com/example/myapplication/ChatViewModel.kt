@@ -1,11 +1,14 @@
 package com.example.myapplication
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.app.Application
+import android.content.Context
+import android.util.Base64
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.auth.SessionManager
+import com.example.myapplication.data.AppDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -19,22 +22,18 @@ import org.json.JSONObject
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.net.URI
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
-import kotlin.math.roundToInt
 
-class ChatViewModel : ViewModel() {
+class ChatViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val app: Application = getApplication()
+    private val prefs = app.getSharedPreferences(CHAT_PREFS_NAME, Context.MODE_PRIVATE)
+    private val sessionManager = SessionManager(app)
 
     private val _chatHistory = MutableLiveData<MutableList<Chat>>(mutableListOf(Chat()))
     val chatHistory: LiveData<MutableList<Chat>> = _chatHistory
@@ -45,14 +44,32 @@ class ChatViewModel : ViewModel() {
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
 
+    private val _docxExportRequest = MutableLiveData<DocxExportRequest?>()
+    val docxExportRequest: LiveData<DocxExportRequest?> = _docxExportRequest
+
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(120, TimeUnit.SECONDS)
         .build()
 
+    init {
+        val savedChats = loadChatsFromStorage()
+        _chatHistory.value = savedChats.ifEmpty { mutableListOf(Chat()) }
+        _currentChatIndex.value = loadCurrentChatIndex(_chatHistory.value?.size ?: 1)
+    }
+
     fun getCurrentChat(): Chat {
-        return _chatHistory.value?.getOrElse(_currentChatIndex.value ?: 0) { Chat() } ?: Chat()
+        val chats = _chatHistory.value ?: mutableListOf(Chat()).also { _chatHistory.value = it }
+        val index = (_currentChatIndex.value ?: 0).coerceIn(0, chats.lastIndex.coerceAtLeast(0))
+        if (chats.isEmpty()) {
+            val chat = Chat()
+            chats.add(chat)
+            _currentChatIndex.value = 0
+            persistChats()
+            return chat
+        }
+        return chats[index]
     }
 
     fun sendMessage(text: String, isUser: Boolean) {
@@ -79,35 +96,69 @@ class ChatViewModel : ViewModel() {
     }
 
     fun createNewChat() {
-        val currentMessages = getCurrentChat().messages
-        if (currentMessages.isNotEmpty()) {
-            val newChat = Chat()
-            _chatHistory.value?.add(newChat)
-            _currentChatIndex.value = (_chatHistory.value?.size ?: 1) - 1
-            _chatHistory.value = _chatHistory.value
+        val chats = _chatHistory.value ?: mutableListOf()
+        if (chats.isEmpty() || getCurrentChat().messages.isNotEmpty()) {
+            chats.add(Chat())
+            _chatHistory.value = chats
+            _currentChatIndex.value = chats.lastIndex
+            persistChats()
         }
     }
 
     fun switchToChat(index: Int) {
-        if (index in 0 until (_chatHistory.value?.size ?: 0) && index != _currentChatIndex.value) {
+        val chats = _chatHistory.value ?: return
+        if (index in chats.indices && index != _currentChatIndex.value) {
             _currentChatIndex.value = index
+            persistChats()
         }
     }
 
+    fun consumeDocxExportRequest() {
+        _docxExportRequest.value = null
+    }
+
     private fun addMessage(message: Message) {
+        val chats = _chatHistory.value ?: mutableListOf(Chat())
+        if (chats.isEmpty()) {
+            chats.add(Chat())
+            _currentChatIndex.value = 0
+        }
         getCurrentChat().messages.add(message)
-        _chatHistory.value = _chatHistory.value
+        _chatHistory.value = chats
+        persistChats()
     }
 
     private fun getAIResponse(userMessage: String) {
         _isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
+            val shouldCreateDocx = isDocumentGenerationRequest(userMessage)
             try {
-                val payload = buildTextPayload(userMessage)
+                val payload = if (shouldCreateDocx) {
+                    buildTextPayload(buildDocumentGenerationPrompt(userMessage), maxTokens = 3200)
+                } else {
+                    buildTextPayload(userMessage)
+                }
+
                 val aiResponse = executeOpenRouterRequestWithRetry(payload)
 
                 withContext(Dispatchers.Main) {
-                    addMessage(Message(text = aiResponse, isUser = false))
+                    if (shouldCreateDocx) {
+                        val fileName = makeDocumentFileName(userMessage, aiResponse)
+                        val documentMessage = Message(
+                            text = "Документ готов: $fileName\nНажмите «Скачать DOCX», чтобы сохранить его на устройство.",
+                            isUser = false,
+                            generatedDocxFileName = fileName,
+                            generatedDocxContent = aiResponse
+                        )
+                        addMessage(documentMessage)
+                        _docxExportRequest.value = DocxExportRequest(
+                            messageId = documentMessage.id,
+                            fileName = fileName,
+                            content = aiResponse
+                        )
+                    } else {
+                        addMessage(Message(text = aiResponse, isUser = false))
+                    }
                     _isLoading.value = false
                 }
             } catch (e: Exception) {
@@ -125,9 +176,9 @@ class ChatViewModel : ViewModel() {
             try {
                 val prompt = buildFilePrompt(fileName, mimeType, userPrompt)
                 val payload = when {
-                    isImageMime(mimeType) -> buildImagePayload(fileName, bytes, prompt)
                     isPdf(fileName, mimeType) -> buildPdfPayload(fileName, bytes, prompt)
                     isDocx(fileName, mimeType) -> buildDocxPayload(fileName, bytes, prompt)
+                    isImageMime(mimeType) -> buildImagePayload(fileName, mimeType, bytes, prompt)
                     else -> throw IllegalArgumentException("Поддерживаются только изображения, PDF и DOCX")
                 }
 
@@ -146,13 +197,9 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Выполняет запрос с повторными попытками при ошибках 429 (rate limit) и 504 (таймаут).
-     * Стратегия: до 3 попыток с экспоненциальной задержкой 2с → 4с → 8с.
-     */
     private suspend fun executeOpenRouterRequestWithRetry(
         payload: JSONObject,
-        maxAttempts: Int = 1
+        maxAttempts: Int = 3
     ): String {
         var lastException: Exception? = null
 
@@ -161,33 +208,22 @@ class ChatViewModel : ViewModel() {
                 return executeOpenRouterRequest(payload)
             } catch (e: RateLimitException) {
                 lastException = e
-                if (attempt < maxAttempts) {
-                    // Экспоненциальная задержка: 2с, 4с, 8с
-                    val delayMs = (2000L * (1 shl (attempt - 1)))
-                    delay(delayMs)
-                }
+                if (attempt < maxAttempts) delay(2000L * (1 shl (attempt - 1)))
             } catch (e: GatewayTimeoutException) {
                 lastException = e
-                if (attempt < maxAttempts) {
-                    val delayMs = (3000L * (1 shl (attempt - 1)))
-                    delay(delayMs)
-                }
+                if (attempt < maxAttempts) delay(3000L * (1 shl (attempt - 1)))
             }
-            // Остальные исключения бросаем сразу без retry
         }
 
         throw lastException ?: IllegalStateException("Неизвестная ошибка после $maxAttempts попыток")
     }
 
-    private fun buildTextPayload(userMessage: String): JSONObject {
+    private suspend fun buildTextPayload(userMessage: String, maxTokens: Int = 1600): JSONObject {
         return JSONObject().apply {
             put("model", AppConfig.openRouterModel)
-            put("max_tokens", 1200)
+            put("max_tokens", maxTokens)
             put("messages", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("role", "system")
-                    put("content", getSystemPrompt())
-                })
+                put(systemMessageJson())
                 put(JSONObject().apply {
                     put("role", "user")
                     put("content", userMessage)
@@ -196,21 +232,62 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    private fun buildImagePayload(fileName: String, originalBytes: ByteArray, prompt: String): JSONObject {
-        ensureS3Configured()
-        val jpegBytes = compressImageHighQuality(originalBytes)
-        val key = "mobile_uploads/images/${UUID.randomUUID().toString().replace("-", "")}.jpg"
-        val uploaded = uploadBytesToS3AndGetPresignedUrl(jpegBytes, key, "image/jpeg")
-        scheduleS3DeleteIfNeeded(uploaded.key)
+    private suspend fun buildPdfPayload(fileName: String, bytes: ByteArray, prompt: String): JSONObject {
+        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        val dataUrl = "data:application/pdf;base64,$base64"
+
+        return JSONObject().apply {
+            put("model", AppConfig.openRouterModel)
+            put("max_tokens", 1800)
+            put("messages", JSONArray().apply {
+                put(systemMessageJson())
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("type", "text")
+                            put("text", prompt.ifBlank {
+                                "Проанализируй PDF-документ. Извлеки ключевые факты, юридически значимые условия, риски и краткий вывод."
+                            })
+                        })
+                        put(JSONObject().apply {
+                            put("type", "file")
+                            put("file", JSONObject().apply {
+                                put("filename", fileName)
+                                put("file_data", dataUrl)
+                            })
+                        })
+                    })
+                })
+            })
+        }
+    }
+
+    private suspend fun buildDocxPayload(fileName: String, bytes: ByteArray, prompt: String): JSONObject {
+        val documentText = extractTextFromDocx(bytes)
+            .take(MAX_DOCX_CHARS)
+            .ifBlank { throw IllegalArgumentException("Не удалось извлечь текст из DOCX") }
+
+        val userContent = buildString {
+            appendLine(prompt.ifBlank { "Проанализируй DOCX-документ." })
+            appendLine()
+            appendLine("Имя файла: $fileName")
+            appendLine("Текст документа:")
+            append(documentText)
+        }
+
+        return buildTextPayload(userContent, maxTokens = 1800)
+    }
+
+    private suspend fun buildImagePayload(fileName: String, mimeType: String, bytes: ByteArray, prompt: String): JSONObject {
+        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        val dataUrl = "data:$mimeType;base64,$base64"
 
         return JSONObject().apply {
             put("model", AppConfig.openRouterVisionModel)
             put("max_tokens", 1400)
             put("messages", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("role", "system")
-                    put("content", getSystemPrompt())
-                })
+                put(systemMessageJson())
                 put(JSONObject().apply {
                     put("role", "user")
                     put("content", JSONArray().apply {
@@ -221,7 +298,7 @@ class ChatViewModel : ViewModel() {
                         put(JSONObject().apply {
                             put("type", "image_url")
                             put("image_url", JSONObject().apply {
-                                put("url", uploaded.presignedUrl)
+                                put("url", dataUrl)
                             })
                         })
                     })
@@ -230,374 +307,170 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    private fun buildPdfPayload(fileName: String, bytes: ByteArray, prompt: String): JSONObject {
-        ensureS3Configured()
-        val key = "mobile_uploads/documents/${UUID.randomUUID().toString().replace("-", "")}.pdf"
-        val uploaded = uploadBytesToS3AndGetPresignedUrl(bytes, key, "application/pdf")
-        scheduleS3DeleteIfNeeded(uploaded.key)
-
+    private suspend fun systemMessageJson(): JSONObject {
+        val prompt = getSystemPrompt()
         return JSONObject().apply {
-            put("model", AppConfig.openRouterModel)
-            put("max_tokens", 1600)
-            put("messages", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("role", "system")
-                    put("content", getSystemPrompt())
-                })
-                put(JSONObject().apply {
-                    put("role", "user")
-                    put("content", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("type", "text")
-                            put("text", prompt.ifBlank { "Проанализируй PDF-документ. Извлеки ключевые факты, юридически значимые условия, риски и краткий вывод." })
-                        })
-                        put(JSONObject().apply {
-                            put("type", "file")
-                            put("file", JSONObject().apply {
-                                put("filename", fileName)
-                                put("file_data", uploaded.presignedUrl)
-                            })
-                        })
-                    })
-                })
-            })
-            put("plugins", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("id", "file-parser")
-                    put("pdf", JSONObject().apply {
-                        put("engine", "cloudflare-ai")
-                    })
-                })
-            })
+            put("role", "system")
+            put("content", prompt)
         }
-    }
-
-    private fun buildDocxPayload(fileName: String, bytes: ByteArray, prompt: String): JSONObject {
-        ensureS3Configured()
-        val key = "mobile_uploads/documents/${UUID.randomUUID().toString().replace("-", "")}.docx"
-        val uploaded = uploadBytesToS3AndGetPresignedUrl(
-            bytes,
-            key,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-        scheduleS3DeleteIfNeeded(uploaded.key)
-
-        val extractedText = extractTextFromDocx(bytes)
-        if (extractedText.isBlank()) {
-            throw IllegalArgumentException("DOCX загружен, но текст из него извлечь не удалось")
-        }
-
-        val textForModel = extractedText.take(MAX_DOCX_CHARS)
-        val finalPrompt = buildString {
-            append(prompt.ifBlank { "Проанализируй DOCX-документ. Извлеки ключевые факты, юридически значимые условия, риски и краткий вывод." })
-            append("\n\nИмя файла: ").append(fileName)
-            append("\nВременная ссылка на исходный файл в S3: ").append(uploaded.presignedUrl)
-            append("\n\nТекст DOCX:\n").append(textForModel)
-            if (extractedText.length > MAX_DOCX_CHARS) {
-                append("\n\n[Текст обрезан до первых ").append(MAX_DOCX_CHARS).append(" символов из-за ограничения контекста.]")
-            }
-        }
-
-        return buildTextPayload(finalPrompt)
     }
 
     private fun executeOpenRouterRequest(payload: JSONObject): String {
         val apiKey = AppConfig.openRouterApiKey
         if (apiKey.isBlank()) {
-            throw IllegalStateException("OPENROUTER_API_KEY не задан в BuildConfig/local.properties")
+            throw IllegalStateException("OPENROUTER_API_KEY не задан в local.properties")
         }
 
         val request = Request.Builder()
             .url("https://openrouter.ai/api/v1/chat/completions")
             .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
+            .addHeader("HTTP-Referer", "https://ai-lawyer.local")
+            .addHeader("X-Title", "AI Lawyer Android")
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
         client.newCall(request).execute().use { response ->
-            val responseBody = response.body?.string()
-
-            // Выбрасываем специализированные исключения для retry-логики
-            if (response.code == 429) {
-                throw RateLimitException("Превышен лимит запросов (429): ${responseBody?.take(200) ?: ""}")
-            }
-            if (response.code == 504) {
-                throw GatewayTimeoutException("Сервер не ответил вовремя (504): ${responseBody?.take(200) ?: ""}")
-            }
+            val responseBody = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                throw IllegalStateException("OpenRouter API вернул ${response.code}: ${responseBody?.take(250) ?: "пустой ответ"}")
+                when (response.code) {
+                    429 -> throw RateLimitException("Слишком много запросов. Попробуйте позже.")
+                    504 -> throw GatewayTimeoutException("Сервер OpenRouter не успел ответить. Попробуйте ещё раз.")
+                    401 -> throw IllegalStateException("Ошибка авторизации OpenRouter: проверьте OPENROUTER_API_KEY")
+                    else -> throw IllegalStateException("Ошибка API ${response.code}: ${responseBody.take(400)}")
+                }
             }
             return parseAIResponse(responseBody)
         }
     }
 
-    private fun parseAIResponse(responseBody: String?): String {
-        return try {
-            val json = JSONObject(responseBody ?: "")
-            if (json.has("error")) {
-                val error = json.getJSONObject("error")
-                return error.optString("message", "Ошибка API")
-            }
-            val choices = json.getJSONArray("choices")
-            if (choices.length() > 0) {
-                val firstChoice = choices.getJSONObject(0)
-                val message = firstChoice.getJSONObject("message")
-                message.getString("content").trim()
-            } else {
-                "Не удалось получить ответ"
-            }
-        } catch (e: Exception) {
-            "Ошибка обработки ответа"
-        }
+    private fun parseAIResponse(responseBody: String): String {
+        val json = JSONObject(responseBody)
+        val choices = json.optJSONArray("choices") ?: JSONArray()
+        if (choices.length() == 0) return "Не удалось получить ответ от модели."
+
+        val message = choices.getJSONObject(0).optJSONObject("message")
+            ?: return "Не удалось прочитать ответ модели."
+
+        return when (val content = message.opt("content")) {
+            is String -> content.trim()
+            is JSONArray -> parseArrayContent(content)
+            else -> content?.toString()?.trim().orEmpty()
+        }.ifBlank { "Модель вернула пустой ответ." }
     }
 
-    /**
-     * Переводит техническое исключение в понятное пользователю сообщение.
-     */
-    private fun friendlyErrorMessage(e: Exception): String {
-        return when (e) {
-            is RateLimitException ->
-                "Сервис временно перегружен. Попробуйте через несколько секунд."
-            is GatewayTimeoutException ->
-                "Сервер не успел ответить. Попробуйте повторить запрос — обычно помогает с 1–2 попытки."
-            else -> e.message ?: "Неизвестная ошибка"
+    private fun parseArrayContent(content: JSONArray): String {
+        val parts = mutableListOf<String>()
+        for (i in 0 until content.length()) {
+            val item = content.optJSONObject(i) ?: continue
+            val text = item.optString("text").ifBlank { item.optString("content") }
+            if (text.isNotBlank()) parts.add(text)
         }
+        return parts.joinToString("\n").trim()
     }
 
     private fun buildFilePrompt(fileName: String, mimeType: String, userPrompt: String): String {
-        return if (userPrompt.isNotBlank()) {
-            userPrompt
+        if (userPrompt.isNotBlank()) return userPrompt
+        return when {
+            isPdf(fileName, mimeType) -> "Проанализируй PDF-документ: $fileName. Дай понятный юридический вывод, важные условия и возможные риски."
+            isDocx(fileName, mimeType) -> "Проанализируй DOCX-документ: $fileName. Дай понятный юридический вывод, важные условия и возможные риски."
+            isImageMime(mimeType) -> "Проанализируй изображение: $fileName. Извлеки текст и объясни юридически важные моменты."
+            else -> "Проанализируй файл: $fileName."
+        }
+    }
+
+    private fun isDocumentGenerationRequest(text: String): Boolean {
+        val normalized = text.lowercase(Locale.getDefault())
+        val createWords = listOf(
+            "создай", "создать", "сгенерируй", "сгенерировать", "подготовь", "подготовить",
+            "составь", "составить", "сделай", "сделать", "напиши", "написать", "оформи", "оформить"
+        )
+        val documentWords = listOf(
+            "договор", "заявлен", "претензи", "иск", "исков", "жалоб", "документ",
+            "соглашен", "уведомлен", "расписк", "акт", "ходатайств", "docx", "word", "ворд"
+        )
+        val downloadWords = listOf("скач", "docx", "word", "ворд", "файл")
+
+        val hasCreateWord = createWords.any { normalized.contains(it) }
+        val hasDocumentWord = documentWords.any { normalized.contains(it) }
+        val hasDownloadWord = downloadWords.any { normalized.contains(it) }
+
+        return hasDocumentWord && (hasCreateWord || hasDownloadWord)
+    }
+
+    private fun buildDocumentGenerationPrompt(userMessage: String): String {
+        return buildString {
+            appendLine(userMessage.trim())
+            appendLine()
+            appendLine("Сгенерируй полный текст документа для последующего сохранения в DOCX.")
+            appendLine("Верни только содержимое документа. Не добавляй приветствие, пояснение, фразу «я подготовил», Markdown, HTML или блоки кода.")
+            appendLine("Первая строка должна быть названием документа.")
+            appendLine("Если не хватает данных, используй аккуратные поля-заглушки в квадратных скобках, например [Адрес квартиры], [ФИО наймодателя].")
+            appendLine("Используй данные профиля пользователя из системного промпта, если они подходят для стороны документа.")
+        }.trim()
+    }
+
+    private fun makeDocumentFileName(userMessage: String, content: String): String {
+        val titleCandidate = content.lineSequence().firstOrNull { it.isNotBlank() }
+            ?: userMessage.lineSequence().firstOrNull { it.isNotBlank() }
+            ?: "document"
+        val safeTitle = titleCandidate
+            .replace(Regex("[^A-Za-zА-Яа-я0-9 _.-]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .take(36)
+            .ifBlank { "document" }
+        val date = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+        return "${safeTitle}_$date.docx"
+    }
+
+    private suspend fun getSystemPrompt(): String {
+        return buildString {
+            append(app.getString(R.string.ai_system_prompt).trimIndent())
+            appendLine()
+            appendLine()
+            appendLine(buildProfileContext())
+            appendLine()
+            appendLine("Используй данные профиля только когда они реально нужны для ответа или подготовки документа. Если данных недостаточно, прямо скажи, каких данных не хватает.")
+            appendLine("Не выдавай себя за адвоката и не обещай гарантированный правовой результат.")
+        }.trim()
+    }
+
+    private suspend fun buildProfileContext(): String {
+        val email = sessionManager.getUserEmail()
+        if (email.isNullOrBlank()) {
+            return "Пользователь не авторизован, данные профиля недоступны."
+        }
+
+        val profile = withContext(Dispatchers.IO) {
+            runCatching {
+                val dao = AppDatabase.getDatabase(app).userDao()
+                ProfileRepository(dao).getUserByEmail(email)
+            }.getOrNull()
+        }
+
+        if (profile == null) {
+            return "Данные профиля пользователя в приложении не найдены. Email текущей сессии: $email"
+        }
+
+        val lines = mutableListOf<String>()
+        if (profile.fullName.isNotBlank()) lines.add("ФИО: ${profile.fullName}")
+        if (!profile.birthDate.isNullOrBlank()) lines.add("Дата рождения: ${profile.birthDate}")
+        if (!profile.passportNumber.isNullOrBlank()) lines.add("Паспорт: ${profile.passportNumber}")
+        if (profile.email.isNotBlank()) lines.add("Email: ${profile.email}")
+
+        return if (lines.isEmpty()) {
+            "Профиль текущего пользователя найден, но ФИО, дата рождения и паспорт не заполнены."
         } else {
-            when {
-                isImageMime(mimeType) -> "Опиши изображение, извлеки весь читаемый текст и укажи, есть ли на нём юридически значимая информация. Файл: $fileName"
-                isPdf(fileName, mimeType) -> "Проанализируй PDF-документ как юридический консультант. Кратко выдели суть, стороны, даты, суммы, обязательства, риски и что стоит проверить. Файл: $fileName"
-                isDocx(fileName, mimeType) -> "Проанализируй DOCX-документ как юридический консультант. Кратко выдели суть, стороны, даты, суммы, обязательства, риски и что стоит проверить. Файл: $fileName"
-                else -> "Проанализируй файл: $fileName"
-            }
+            "Данные профиля текущего пользователя из локальной Room-базы приложения:\n${lines.joinToString("\n")}"
         }
     }
 
-    private fun getSystemPrompt(): String {
-        return """
-            Ты юридический консультант в чате Android-приложения AI Lawyer.
-
-            КРИТИЧЕСКИ ВАЖНО: приложение отображает только чистый текст.
-            Не используй Markdown, HTML, таблицы, кодовые блоки и декоративное форматирование.
-            Списки делай только через цифры с точкой: 1. 2. 3.
-
-            При анализе документов и фотографий:
-            1. Сначала кратко опиши, что это за материал.
-            2. Выдели юридически значимые факты: стороны, даты, суммы, обязательства, сроки, подписи, реквизиты.
-            3. Отдельно перечисли риски и неясные места.
-            4. Дай практический вывод и следующие шаги.
-            5. Если данных недостаточно или текст не читается, прямо скажи об этом.
-
-            Не выдавай себя за адвоката и не обещай гарантированный правовой результат.
-        """.trimIndent()
-    }
-
-    private fun compressImageHighQuality(imageData: ByteArray): ByteArray {
-        return try {
-            val bitmap = BitmapFactory.decodeByteArray(imageData, 0, imageData.size) ?: return imageData
-            val maxDim = maxOf(bitmap.width, bitmap.height)
-            val scaledBitmap = if (maxDim > AppConfig.imageMaxSize) {
-                val ratio = AppConfig.imageMaxSize.toFloat() / maxDim.toFloat()
-                Bitmap.createScaledBitmap(
-                    bitmap,
-                    (bitmap.width * ratio).roundToInt().coerceAtLeast(1),
-                    (bitmap.height * ratio).roundToInt().coerceAtLeast(1),
-                    true
-                )
-            } else {
-                bitmap
-            }
-
-            val output = ByteArrayOutputStream()
-            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, AppConfig.imageQuality, output)
-            if (scaledBitmap !== bitmap) scaledBitmap.recycle()
-            bitmap.recycle()
-            output.toByteArray()
-        } catch (e: Exception) {
-            imageData
-        }
-    }
-
-    private fun uploadBytesToS3AndGetPresignedUrl(bytes: ByteArray, key: String, contentType: String): UploadedS3Object {
-        putObjectToS3(key, bytes, contentType)
-        return UploadedS3Object(key = key, presignedUrl = createPresignedGetUrl(key, AppConfig.s3PresignedExpiration))
-    }
-
-    private fun ensureS3Configured() {
-        if (!AppConfig.s3Enabled) {
-            throw IllegalStateException("S3_ENABLED отключён")
-        }
-        if (AppConfig.s3EndpointUrl.isBlank() || AppConfig.s3AccessKey.isBlank() || AppConfig.s3SecretKey.isBlank() || AppConfig.s3Bucket.isBlank()) {
-            throw IllegalStateException("S3_ENDPOINT_URL/S3_ACCESS_KEY/S3_SECRET_KEY/S3_BUCKET не заданы")
-        }
-        if (!AppConfig.s3AccessKey.matches(Regex("^[A-Za-z0-9]+$"))) {
-            throw IllegalStateException("S3_ACCESS_KEY выглядит некорректно: уберите кавычки, пробелы и комментарии после значения в local.properties")
-        }
-        if (AppConfig.s3Region.contains(' ') || AppConfig.s3Region.contains('#')) {
-            throw IllegalStateException("S3_REGION выглядит некорректно: в local.properties оставьте только us-east-005 без комментария в этой же строке")
-        }
-    }
-
-    private fun putObjectToS3(key: String, bytes: ByteArray, contentType: String) {
-        val uploadUrl = createPresignedPutUrl(key, AppConfig.s3PresignedExpiration)
-
-        val request = Request.Builder()
-            .url(uploadUrl)
-            .put(bytes.toRequestBody(contentType.toMediaType()))
-            .addHeader("Content-Type", contentType)
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                val body = response.body?.string()?.take(500) ?: ""
-                throw IllegalStateException("S3 upload failed: ${response.code} $body")
-            }
-        }
-    }
-
-    private fun createPresignedPutUrl(key: String, expiresInSeconds: Int): String {
-        val endpoint = AppConfig.s3EndpointUrl.trimEnd('/')
-        val uri = URI(endpoint)
-        val host = buildHostHeader(uri)
-        val now = Date()
-        val amzDate = formatAmzDate(now)
-        val dateStamp = formatDateStamp(now)
-        val credentialScope = "$dateStamp/${AppConfig.s3Region}/s3/aws4_request"
-        val canonicalUri = "/${awsEncode(AppConfig.s3Bucket, true)}/${awsEncode(key, false)}"
-        val signedHeaders = "host"
-
-        val queryParams = linkedMapOf(
-            "X-Amz-Algorithm" to "AWS4-HMAC-SHA256",
-            "X-Amz-Credential" to "${AppConfig.s3AccessKey}/$credentialScope",
-            "X-Amz-Date" to amzDate,
-            "X-Amz-Expires" to expiresInSeconds.coerceAtLeast(1).toString(),
-            "X-Amz-SignedHeaders" to signedHeaders
-        ).toSortedMap()
-
-        val canonicalQuery = queryParams.entries.joinToString("&") { (name, value) ->
-            "${awsEncode(name, true)}=${awsEncode(value, true)}"
-        }
-        val canonicalHeaders = "host:$host\n"
-        val canonicalRequest = listOf(
-            "PUT",
-            canonicalUri,
-            canonicalQuery,
-            canonicalHeaders,
-            signedHeaders,
-            "UNSIGNED-PAYLOAD"
-        ).joinToString("\n")
-        val stringToSign = listOf(
-            "AWS4-HMAC-SHA256",
-            amzDate,
-            credentialScope,
-            sha256Hex(canonicalRequest.toByteArray(StandardCharsets.UTF_8))
-        ).joinToString("\n")
-        val signature = hmacSha256Hex(getSignatureKey(AppConfig.s3SecretKey, dateStamp, AppConfig.s3Region, "s3"), stringToSign)
-        return "$endpoint$canonicalUri?$canonicalQuery&X-Amz-Signature=$signature"
-    }
-
-    private fun createPresignedGetUrl(key: String, expiresInSeconds: Int): String {
-        val endpoint = AppConfig.s3EndpointUrl.trimEnd('/')
-        val uri = URI(endpoint)
-        val host = buildHostHeader(uri)
-        val now = Date()
-        val amzDate = formatAmzDate(now)
-        val dateStamp = formatDateStamp(now)
-        val credentialScope = "$dateStamp/${AppConfig.s3Region}/s3/aws4_request"
-        val canonicalUri = "/${awsEncode(AppConfig.s3Bucket, true)}/${awsEncode(key, false)}"
-        val signedHeaders = "host"
-
-        val queryParams = linkedMapOf(
-            "X-Amz-Algorithm" to "AWS4-HMAC-SHA256",
-            "X-Amz-Credential" to "${AppConfig.s3AccessKey}/$credentialScope",
-            "X-Amz-Date" to amzDate,
-            "X-Amz-Expires" to expiresInSeconds.coerceAtLeast(1).toString(),
-            "X-Amz-SignedHeaders" to signedHeaders
-        ).toSortedMap()
-
-        val canonicalQuery = queryParams.entries.joinToString("&") { (name, value) ->
-            "${awsEncode(name, true)}=${awsEncode(value, true)}"
-        }
-        val canonicalHeaders = "host:$host\n"
-        val canonicalRequest = listOf(
-            "GET",
-            canonicalUri,
-            canonicalQuery,
-            canonicalHeaders,
-            signedHeaders,
-            "UNSIGNED-PAYLOAD"
-        ).joinToString("\n")
-        val stringToSign = listOf(
-            "AWS4-HMAC-SHA256",
-            amzDate,
-            credentialScope,
-            sha256Hex(canonicalRequest.toByteArray(StandardCharsets.UTF_8))
-        ).joinToString("\n")
-        val signature = hmacSha256Hex(getSignatureKey(AppConfig.s3SecretKey, dateStamp, AppConfig.s3Region, "s3"), stringToSign)
-        return "$endpoint$canonicalUri?$canonicalQuery&X-Amz-Signature=$signature"
-    }
-
-    private fun deleteObjectFromS3(key: String) {
-        val deleteUrl = createPresignedDeleteUrl(key, AppConfig.s3PresignedExpiration)
-        val request = Request.Builder()
-            .url(deleteUrl)
-            .delete()
-            .build()
-
-        client.newCall(request).execute().close()
-    }
-
-    private fun createPresignedDeleteUrl(key: String, expiresInSeconds: Int): String {
-        val endpoint = AppConfig.s3EndpointUrl.trimEnd('/')
-        val uri = URI(endpoint)
-        val host = buildHostHeader(uri)
-        val now = Date()
-        val amzDate = formatAmzDate(now)
-        val dateStamp = formatDateStamp(now)
-        val credentialScope = "$dateStamp/${AppConfig.s3Region}/s3/aws4_request"
-        val canonicalUri = "/${awsEncode(AppConfig.s3Bucket, true)}/${awsEncode(key, false)}"
-        val signedHeaders = "host"
-
-        val queryParams = linkedMapOf(
-            "X-Amz-Algorithm" to "AWS4-HMAC-SHA256",
-            "X-Amz-Credential" to "${AppConfig.s3AccessKey}/$credentialScope",
-            "X-Amz-Date" to amzDate,
-            "X-Amz-Expires" to expiresInSeconds.coerceAtLeast(1).toString(),
-            "X-Amz-SignedHeaders" to signedHeaders
-        ).toSortedMap()
-
-        val canonicalQuery = queryParams.entries.joinToString("&") { (name, value) ->
-            "${awsEncode(name, true)}=${awsEncode(value, true)}"
-        }
-        val canonicalHeaders = "host:$host\n"
-        val canonicalRequest = listOf(
-            "DELETE",
-            canonicalUri,
-            canonicalQuery,
-            canonicalHeaders,
-            signedHeaders,
-            "UNSIGNED-PAYLOAD"
-        ).joinToString("\n")
-        val stringToSign = listOf(
-            "AWS4-HMAC-SHA256",
-            amzDate,
-            credentialScope,
-            sha256Hex(canonicalRequest.toByteArray(StandardCharsets.UTF_8))
-        ).joinToString("\n")
-        val signature = hmacSha256Hex(getSignatureKey(AppConfig.s3SecretKey, dateStamp, AppConfig.s3Region, "s3"), stringToSign)
-        return "$endpoint$canonicalUri?$canonicalQuery&X-Amz-Signature=$signature"
-    }
-
-    private fun scheduleS3DeleteIfNeeded(key: String) {
-        val delaySeconds = AppConfig.s3AutoDeleteAfter
-        if (delaySeconds <= 0) return
-        viewModelScope.launch(Dispatchers.IO) {
-            delay(delaySeconds * 1000L)
-            runCatching { deleteObjectFromS3(key) }
+    private fun friendlyErrorMessage(e: Exception): String {
+        return when (e) {
+            is RateLimitException -> e.message ?: "Слишком много запросов. Попробуйте позже."
+            is GatewayTimeoutException -> e.message ?: "Сервер не успел ответить. Попробуйте ещё раз."
+            else -> e.message?.takeIf { it.isNotBlank() } ?: "Ошибка соединения. Проверьте интернет и попробуйте ещё раз."
         }
     }
 
@@ -653,7 +526,7 @@ class ChatViewModel : ViewModel() {
         return when {
             mimeType?.startsWith("image/") == true -> mimeType
             mimeType == "application/pdf" || lowerName.endsWith(".pdf") -> "application/pdf"
-            mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || lowerName.endsWith(".docx") -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            mimeType == DOCX_MIME || lowerName.endsWith(".docx") -> DOCX_MIME
             lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg") -> "image/jpeg"
             lowerName.endsWith(".png") -> "image/png"
             lowerName.endsWith(".webp") -> "image/webp"
@@ -668,86 +541,96 @@ class ChatViewModel : ViewModel() {
     }
 
     private fun isDocx(fileName: String, mimeType: String): Boolean {
-        return mimeType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || fileName.lowercase(Locale.US).endsWith(".docx")
+        return mimeType == DOCX_MIME || fileName.lowercase(Locale.US).endsWith(".docx")
     }
 
-    private fun buildHostHeader(uri: URI): String {
-        val host = uri.host ?: throw IllegalArgumentException("Некорректный S3_ENDPOINT_URL")
-        return if (uri.port != -1) "$host:${uri.port}" else host
+    private fun loadChatsFromStorage(): MutableList<Chat> {
+        val rawJson = prefs.getString(KEY_CHATS_JSON, null) ?: return mutableListOf(Chat())
+        return runCatching {
+            val array = JSONArray(rawJson)
+            val chats = mutableListOf<Chat>()
+            for (i in 0 until array.length()) {
+                val chatJson = array.getJSONObject(i)
+                val messagesJson = chatJson.optJSONArray("messages") ?: JSONArray()
+                val messages = mutableListOf<Message>()
+                for (j in 0 until messagesJson.length()) {
+                    val messageJson = messagesJson.getJSONObject(j)
+                    messages.add(
+                        Message(
+                            text = messageJson.optString("text"),
+                            isUser = messageJson.optBoolean("isUser"),
+                            time = messageJson.optString("time"),
+                            attachmentName = messageJson.optStringOrNull("attachmentName"),
+                            attachmentMimeType = messageJson.optStringOrNull("attachmentMimeType"),
+                            id = messageJson.optString("id").ifBlank { UUID.randomUUID().toString() },
+                            generatedDocxFileName = messageJson.optStringOrNull("generatedDocxFileName"),
+                            generatedDocxContent = messageJson.optStringOrNull("generatedDocxContent")
+                        )
+                    )
+                }
+                chats.add(
+                    Chat(
+                        id = chatJson.optString("id").ifBlank { UUID.randomUUID().toString() },
+                        messages = messages,
+                        createdAt = chatJson.optString("createdAt").ifBlank { Chat().createdAt }
+                    )
+                )
+            }
+            chats.ifEmpty { mutableListOf(Chat()) }
+        }.getOrElse { mutableListOf(Chat()) }
     }
 
-    private fun formatAmzDate(date: Date): String {
-        return SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }.format(date)
+    private fun loadCurrentChatIndex(chatCount: Int): Int {
+        val savedIndex = prefs.getInt(KEY_CURRENT_CHAT_INDEX, 0)
+        return savedIndex.coerceIn(0, (chatCount - 1).coerceAtLeast(0))
     }
 
-    private fun formatDateStamp(date: Date): String {
-        return SimpleDateFormat("yyyyMMdd", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }.format(date)
+    private fun persistChats() {
+        val chats = _chatHistory.value ?: mutableListOf(Chat())
+        val currentIndex = (_currentChatIndex.value ?: 0).coerceIn(0, (chats.size - 1).coerceAtLeast(0))
+        prefs.edit()
+            .putString(KEY_CHATS_JSON, chatsToJson(chats).toString())
+            .putInt(KEY_CURRENT_CHAT_INDEX, currentIndex)
+            .apply()
     }
 
-    private fun sha256Hex(bytes: ByteArray): String {
-        return MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
-    }
-
-    private fun hmacSha256(key: ByteArray, data: String): ByteArray {
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(key, "HmacSHA256"))
-        return mac.doFinal(data.toByteArray(StandardCharsets.UTF_8))
-    }
-
-    private fun hmacSha256Hex(key: ByteArray, data: String): String {
-        return hmacSha256(key, data).toHex()
-    }
-
-    private fun getSignatureKey(secretKey: String, dateStamp: String, regionName: String, serviceName: String): ByteArray {
-        val kDate = hmacSha256(("AWS4$secretKey").toByteArray(StandardCharsets.UTF_8), dateStamp)
-        val kRegion = hmacSha256(kDate, regionName)
-        val kService = hmacSha256(kRegion, serviceName)
-        return hmacSha256(kService, "aws4_request")
-    }
-
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }
-
-    private fun awsEncode(value: String, encodeSlash: Boolean): String {
-        val result = StringBuilder()
-        for (byte in value.toByteArray(StandardCharsets.UTF_8)) {
-            val unsigned = byte.toInt() and 0xff
-            val char = unsigned.toChar()
-            val isUnreserved = char in 'A'..'Z' || char in 'a'..'z' || char in '0'..'9' || char == '-' || char == '_' || char == '.' || char == '~'
-            when {
-                isUnreserved -> result.append(char)
-                char == '/' && !encodeSlash -> result.append('/')
-                else -> result.append("%${"%02X".format(unsigned)}")
+    private fun chatsToJson(chats: List<Chat>): JSONArray {
+        return JSONArray().apply {
+            chats.forEach { chat ->
+                put(JSONObject().apply {
+                    put("id", chat.id)
+                    put("createdAt", chat.createdAt)
+                    put("messages", JSONArray().apply {
+                        chat.messages.forEach { message ->
+                            put(JSONObject().apply {
+                                put("id", message.id)
+                                put("text", message.text)
+                                put("isUser", message.isUser)
+                                put("time", message.time)
+                                put("attachmentName", message.attachmentName)
+                                put("attachmentMimeType", message.attachmentMimeType)
+                                put("generatedDocxFileName", message.generatedDocxFileName)
+                                put("generatedDocxContent", message.generatedDocxContent)
+                            })
+                        }
+                    })
+                })
             }
         }
-        return result.toString()
     }
 
-    // Специализированные исключения для retry-логики
+    private fun JSONObject.optStringOrNull(name: String): String? {
+        if (isNull(name)) return null
+        return optString(name).takeIf { it.isNotBlank() }
+    }
+
     class RateLimitException(message: String) : Exception(message)
     class GatewayTimeoutException(message: String) : Exception(message)
 
-    private data class UploadedS3Object(val key: String, val presignedUrl: String)
-
     private object AppConfig {
         val openRouterApiKey: String by lazy { buildConfigString("OPENROUTER_API_KEY") }
-        val openRouterModel: String by lazy { buildConfigString("OPENROUTER_MODEL", "google/gemini-2.0-flash-001") }
+        val openRouterModel: String by lazy { buildConfigString("OPENROUTER_MODEL", "openai/gpt-4o-mini") }
         val openRouterVisionModel: String by lazy { buildConfigString("OPENROUTER_VISION_MODEL", openRouterModel) }
-
-        val s3Enabled: Boolean by lazy { buildConfigString("S3_ENABLED", "1") == "1" }
-        val s3EndpointUrl: String by lazy { buildConfigString("S3_ENDPOINT_URL") }
-        val s3Region: String by lazy { buildConfigString("S3_REGION", "us-east-005").ifBlank { "us-east-005" } }
-        val s3AccessKey: String by lazy { buildConfigString("S3_ACCESS_KEY") }
-        val s3SecretKey: String by lazy { buildConfigString("S3_SECRET_KEY") }
-        val s3Bucket: String by lazy { buildConfigString("S3_BUCKET") }
-        val s3PresignedExpiration: Int by lazy { buildConfigInt("S3_PRESIGNED_EXPIRATION", 600) }
-        val s3AutoDeleteAfter: Int by lazy { buildConfigInt("S3_AUTO_DELETE_AFTER", 0) }
-
-        val imageMaxSize: Int by lazy { buildConfigInt("IMAGE_MAX_SIZE", 1600) }
-        val imageQuality: Int by lazy { buildConfigInt("IMAGE_QUALITY", 90).coerceIn(1, 100) }
 
         private fun buildConfigString(name: String, defaultValue: String = ""): String {
             val rawValue = try {
@@ -759,31 +642,28 @@ class ChatViewModel : ViewModel() {
             return cleanBuildConfigValue(rawValue)
         }
 
-        private fun buildConfigInt(name: String, defaultValue: Int): Int {
-            return buildConfigString(name, defaultValue.toString()).toIntOrNull() ?: defaultValue
-        }
-
         private fun cleanBuildConfigValue(value: String): String {
             var result = value.trim()
-
             if (result.length >= 2) {
                 val first = result.first()
                 val last = result.last()
-                if ((first == '"' && last == '"')) {
+                if (first == '"' && last == '"') {
                     result = result.substring(1, result.length - 1).trim()
                 }
             }
-
             val inlineCommentIndex = Regex("\\s+#").find(result)?.range?.first
             if (inlineCommentIndex != null) {
                 result = result.substring(0, inlineCommentIndex).trim()
             }
-
             return result
         }
     }
 
     companion object {
+        private const val CHAT_PREFS_NAME = "chat_local_storage"
+        private const val KEY_CHATS_JSON = "chats_json"
+        private const val KEY_CURRENT_CHAT_INDEX = "current_chat_index"
         private const val MAX_DOCX_CHARS = 60_000
+        private const val DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     }
 }

@@ -7,4 +7,16 @@
     <color name="black">#000000</color>
     <color name="white">#FFFFFF</color>
     <color name="yellow_500">#F59E0B</color>
+    <color name="unread_chat_title">#1B5E20</color>
+    <color name="chat_title">#374151</color>
+    <color name="current_chat_title">#000000</color>
+
+    <color name="chat_history_selected_bg">#FFF9C4</color>
+    <color name="chat_history_unread_bg">#E8F5E9</color>
+    <color name="chat_history_default_bg">#F3F4F6</color>
+    <color name="chat_history_border">#E5E7EB</color>
+
+    <color name="message_time_text">#9CA3AF</color>
+    <color name="message_user_text">#FFFFFF</color>
+    <color name="message_bot_text">#000000</color>
 </resources>
